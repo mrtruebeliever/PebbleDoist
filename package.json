@@ -1,0 +1,65 @@
+{
+  "name": "pebbledoist",
+  "author": "mrtruebeliever",
+  "version": "1.0.0",
+  "license": "MIT",
+  "keywords": ["pebble-app"],
+  "private": true,
+  "dependencies": {
+    "pebble-clay": "^1.0.4"
+  },
+  "pebble": {
+    "displayName": "PebbleDoist",
+    "uuid": "69de8701-3317-4381-bb1b-9760d6a14a19",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "capabilities": [
+      "configurable"
+    ],
+    "targetPlatforms": [
+      "emery"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "messageKeys": [
+      "TODOIST_TOKEN",
+      "PROJECTS_SEL",
+      "LANGUAGE",
+      "START_VIEW",
+      "DEFAULT_PROJECT",
+      "DEFAULT_PROJECT_ID",
+      "DEFAULT_PROJECT_NAME",
+      "LOAD_STATE",
+      "PROJ_COUNT",
+      "PROJ_INDEX",
+      "PROJ_ID",
+      "PROJ_NAME",
+      "PROJ_TASKCOUNT",
+      "TASK_COUNT",
+      "TASK_INDEX",
+      "TASK_ID",
+      "TASK_TITLE",
+      "TASK_DONE",
+      "REQUEST_PROJECTS",
+      "REQUEST_TASKS",
+      "PROJECT_ID",
+      "ADD_TASK",
+      "TASK_CONTENT",
+      "CLOSE_TASK",
+      "DELETE_TASK",
+      "REFRESH",
+      "TIMELINE_ENABLED"
+    ],
+    "resources": {
+      "media": [
+        {
+          "type": "png",
+          "name": "IMG_MENU_ICON",
+          "file": "images/menu_icon.png",
+          "menuIcon": true
+        }
+      ]
+    }
+  }
+}

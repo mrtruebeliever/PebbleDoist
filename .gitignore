@@ -1,0 +1,18 @@
+# Pebble build output
+build/
+*.pbw
+
+# Waf lock files (contain absolute paths / environment dumps)
+.lock-waf*
+
+# Dependencies
+node_modules/
+
+# Local Python venv used only for icon generation
+.art-venv/
+
+# Editor / OS cruft
+.DS_Store
+*.swp
+__pycache__/
+*.pyc
