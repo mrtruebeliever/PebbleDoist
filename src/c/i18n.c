@@ -23,6 +23,8 @@ static const char *S[LANG_COUNT][STR_COUNT] = {
     [STR_NOTHING_TODAY] = "Nothing for today",
     [STR_N_TASK]        = "%d task",
     [STR_N_TASKS]       = "%d tasks",
+    [STR_DETAILS]       = "Details",
+    [STR_DUE]           = "Due",
   },
   [LANG_NL] = {
     [STR_TODAY]         = "Vandaag",
@@ -43,6 +45,8 @@ static const char *S[LANG_COUNT][STR_COUNT] = {
     [STR_NOTHING_TODAY] = "Niets voor vandaag",
     [STR_N_TASK]        = "%d taak",
     [STR_N_TASKS]       = "%d taken",
+    [STR_DETAILS]       = "Details",
+    [STR_DUE]           = "Deadline",
   },
   [LANG_FR] = {
     [STR_TODAY]         = "Aujourd'hui",
@@ -63,6 +67,8 @@ static const char *S[LANG_COUNT][STR_COUNT] = {
     [STR_NOTHING_TODAY] = "Rien pour aujourd'hui",
     [STR_N_TASK]        = "%d tâche",
     [STR_N_TASKS]       = "%d tâches",
+    [STR_DETAILS]       = "Détails",
+    [STR_DUE]           = "Échéance",
   },
   [LANG_DE] = {
     [STR_TODAY]         = "Heute",
@@ -83,6 +89,8 @@ static const char *S[LANG_COUNT][STR_COUNT] = {
     [STR_NOTHING_TODAY] = "Nichts für heute",
     [STR_N_TASK]        = "%d Aufgabe",
     [STR_N_TASKS]       = "%d Aufgaben",
+    [STR_DETAILS]       = "Details",
+    [STR_DUE]           = "Fällig",
   },
   [LANG_ES] = {
     [STR_TODAY]         = "Hoy",
@@ -103,6 +111,8 @@ static const char *S[LANG_COUNT][STR_COUNT] = {
     [STR_NOTHING_TODAY] = "Nada para hoy",
     [STR_N_TASK]        = "%d tarea",
     [STR_N_TASKS]       = "%d tareas",
+    [STR_DETAILS]       = "Detalles",
+    [STR_DUE]           = "Fecha límite",
   },
 };
 

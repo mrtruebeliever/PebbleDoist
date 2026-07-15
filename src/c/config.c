@@ -106,6 +106,10 @@ static void apply_task(DictionaryIterator *iter) {
     strncpy(tk->title, t->value->cstring, TASK_TITLE_LEN - 1);
     tk->title[TASK_TITLE_LEN - 1] = '\0';
   }
+  if ((t = dict_find(iter, MESSAGE_KEY_TASK_DUE))) {
+    strncpy(tk->due, t->value->cstring, TASK_DUE_LEN - 1);
+    tk->due[TASK_DUE_LEN - 1] = '\0';
+  }
   tk->done = (t = dict_find(iter, MESSAGE_KEY_TASK_DONE)) ? (t->value->int32 != 0) : false;
 }
 

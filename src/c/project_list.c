@@ -9,6 +9,14 @@
 static Window         *s_window = NULL;
 static MenuLayer      *s_menu = NULL;
 static StatusBarLayer *s_status_bar = NULL;
+static Layer          *s_refresh_bar = NULL;   // thin accent line shown while refreshing
+
+// True when the overview should show its rows: loaded, or refreshing while cached
+// projects are still present (stale-while-revalidate — avoids a loading flash).
+static bool list_ready(void) {
+  int s = data_load_state();
+  return s == LOAD_OK || (s == LOAD_LOADING && data_project_count() > 0);
+}
 
 // Holds the dictated text while the post-dictation project picker is open.
 static char            s_pending_add[TASK_TITLE_LEN];
@@ -50,7 +58,7 @@ static void open_add_picker(const char *content) {
   }
   ActionMenuConfig cfg = {
     .root_level = s_pick_root,
-    .colors = { .background = theme_accent(), .foreground = GColorWhite },
+    .colors = { .background = theme_accent(), .foreground = GColorBlack },
     .align = ActionMenuAlignCenter,
     .did_close = pick_did_close,
     .context = s_pick_root,
@@ -85,7 +93,7 @@ static void open_options_menu(void) {
   action_menu_level_add_action(root, i18n(STR_REFRESH), refresh_performed, NULL);
   ActionMenuConfig cfg = {
     .root_level = root,
-    .colors = { .background = theme_accent(), .foreground = GColorWhite },
+    .colors = { .background = theme_accent(), .foreground = GColorBlack },
     .align = ActionMenuAlignCenter,
     .did_close = options_did_close,
     .context = root,
@@ -99,7 +107,7 @@ static void open_options_menu(void) {
 static int add_row_index(void) { return 1 + data_project_count(); }
 
 static uint16_t get_num_rows(MenuLayer *ml, uint16_t section, void *ctx) {
-  if (data_load_state() == LOAD_OK) {
+  if (list_ready()) {
     return 2 + data_project_count();  // Vandaag + projects + "Nieuwe taak"
   }
   return 1;  // status row
@@ -112,12 +120,13 @@ static int16_t get_cell_height(MenuLayer *ml, MenuIndex *ci, void *ctx) {
 static void draw_text_row(GContext *ctx, const Layer *cell, const char *title, const char *sub) {
   GRect b = layer_get_bounds(cell);
   bool hl = menu_cell_layer_is_highlighted(cell);
-  graphics_context_set_text_color(ctx, hl ? GColorWhite : GColorBlack);
+  // Dark text on the red highlight reads better in low light than white.
+  graphics_context_set_text_color(ctx, GColorBlack);
   graphics_draw_text(ctx, title, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
                      GRect(8, 0, b.size.w - 12, 28),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   if (sub && sub[0]) {
-    graphics_context_set_text_color(ctx, hl ? GColorWhite : GColorDarkGray);
+    graphics_context_set_text_color(ctx, hl ? GColorBlack : GColorDarkGray);
     graphics_draw_text(ctx, sub, fonts_get_system_font(FONT_KEY_GOTHIC_14),
                        GRect(8, 26, b.size.w - 12, 16),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
@@ -136,7 +145,7 @@ static void draw_status_row(GContext *ctx, const Layer *cell) {
 }
 
 static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *ci, void *c) {
-  if (data_load_state() != LOAD_OK) {
+  if (!list_ready()) {
     draw_status_row(ctx, cell);
     return;
   }
@@ -156,7 +165,7 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *ci, void *c) {
 }
 
 static void select_click(MenuLayer *ml, MenuIndex *ci, void *ctx) {
-  if (data_load_state() != LOAD_OK) {
+  if (!list_ready()) {
     if (data_load_state() == LOAD_ERROR) {
       data_set_load_state(LOAD_LOADING);
       config_request_refresh();
@@ -182,6 +191,20 @@ static void select_long_click(MenuLayer *ml, MenuIndex *ci, void *ctx) {
   open_options_menu();
 }
 
+// --- Refresh indicator -------------------------------------------------------
+
+static void refresh_bar_update(Layer *layer, GContext *ctx) {
+  graphics_context_set_fill_color(ctx, theme_accent());
+  graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
+}
+
+// Shows the thin accent line only while a background refresh runs over cached rows.
+static void update_refresh_bar(void) {
+  if (!s_refresh_bar) { return; }
+  bool refreshing = (data_load_state() == LOAD_LOADING && data_project_count() > 0);
+  layer_set_hidden(s_refresh_bar, !refreshing);
+}
+
 // --- Window ------------------------------------------------------------------
 
 static void window_load(Window *window) {
@@ -203,14 +226,21 @@ static void window_load(Window *window) {
     .select_long_click = select_long_click,
   });
   menu_layer_set_normal_colors(s_menu, GColorWhite, GColorBlack);
-  menu_layer_set_highlight_colors(s_menu, theme_accent(), GColorWhite);
+  menu_layer_set_highlight_colors(s_menu, theme_accent(), GColorBlack);
   menu_layer_set_click_config_onto_window(s_menu, window);
   layer_add_child(root, menu_layer_get_layer(s_menu));
+
+  // Thin accent line just under the status bar, shown only while refreshing.
+  s_refresh_bar = layer_create(GRect(0, top - 3, b.size.w, 3));
+  layer_set_update_proc(s_refresh_bar, refresh_bar_update);
+  layer_set_hidden(s_refresh_bar, true);
+  layer_add_child(root, s_refresh_bar);
 }
 
 static void window_unload(Window *window) {
   menu_layer_destroy(s_menu);
   s_menu = NULL;
+  if (s_refresh_bar) { layer_destroy(s_refresh_bar); s_refresh_bar = NULL; }
   status_bar_layer_destroy(s_status_bar);
   s_status_bar = NULL;
 }
@@ -231,6 +261,7 @@ void project_list_reload(void) {
   if (s_menu) {
     menu_layer_reload_data(s_menu);
   }
+  update_refresh_bar();
 }
 
 void project_list_destroy(void) {

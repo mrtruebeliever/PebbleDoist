@@ -35,6 +35,8 @@ typedef enum {
   STR_NOTHING_TODAY,  // "Nothing for today"
   STR_N_TASK,         // "%d task"   (printf format, one arg)
   STR_N_TASKS,        // "%d tasks"  (printf format, one arg)
+  STR_DETAILS,        // "Details"
+  STR_DUE,            // "Deadline"
   STR_COUNT,
 } StrId;
 

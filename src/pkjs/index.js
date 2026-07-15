@@ -150,7 +150,8 @@ function streamTasks(tasks) {
       var msg = {};
       msg[keys.TASK_INDEX] = i;
       msg[keys.TASK_ID] = String(t.id);
-      msg[keys.TASK_TITLE] = String(t.title).substring(0, 63);
+      msg[keys.TASK_TITLE] = String(t.title).substring(0, 127);
+      msg[keys.TASK_DUE] = String(t.due || '').substring(0, 31);
       msg[keys.TASK_DONE] = t.done ? 1 : 0;
       Pebble.sendAppMessage(msg, function () { i++; next(); },
         function () { console.log('task ' + i + ' send failed'); i++; next(); });
@@ -190,7 +191,37 @@ function loadProjects() {
   step();
 }
 
-// Maps Todoist task objects to the small {id,title,done} the watch needs.
+// Short month names per UI language. ASCII-only except the é that Pebble's GOTHIC
+// font is known to render; avoids the pkjs runtime's unreliable Intl support.
+var DUE_MONTHS = {
+  en: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+  nl: ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'],
+  fr: ['janv','févr','mars','avr','mai','juin','juil','aout','sept','oct','nov','déc'],
+  de: ['Jan','Feb','Mrz','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'],
+  es: ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+};
+function localeFor(langIdx) { return ['en','nl','fr','de','es'][langIdx] || 'en'; }
+
+// Compact human-readable due label from a Todoist task's `due` object; '' if none.
+function formatDue(due) {
+  if (!due) { return ''; }
+  var mon = DUE_MONTHS[localeFor(getPageLang())] || DUE_MONTHS.en;
+  function dm(d, mIdx) { return d + ' ' + (mon[mIdx] || ''); }
+  if (due.datetime) {
+    var dt = new Date(due.datetime);
+    if (!isNaN(dt.getTime())) {
+      var hh = ('0' + dt.getHours()).slice(-2), mm = ('0' + dt.getMinutes()).slice(-2);
+      return dm(dt.getDate(), dt.getMonth()) + ' ' + hh + ':' + mm;
+    }
+  }
+  if (due.date) {
+    var p = String(due.date).split('-');
+    if (p.length === 3) { return dm(parseInt(p[2], 10), parseInt(p[1], 10) - 1); }
+  }
+  return String(due.string || '');
+}
+
+// Maps Todoist task objects to the small {id,title,done,due} the watch needs.
 // `prefixProject` adds "Project · " for the mixed Vandaag view.
 function mapTasks(raw, prefixProject) {
   return (raw || []).map(function (t) {
@@ -200,7 +231,7 @@ function mapTasks(raw, prefixProject) {
       if (nm) title = nm + ' · ' + title;
     }
     var done = t.is_completed || t.checked || t.completed || false;
-    return { id: t.id, title: title, done: !!done };
+    return { id: t.id, title: title, done: !!done, due: formatDue(t.due) };
   });
 }
 

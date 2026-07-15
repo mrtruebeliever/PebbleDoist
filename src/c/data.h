@@ -7,7 +7,8 @@
 #define PROJ_ID_LEN     24   // Todoist project id (v2 ~10 digits; room to spare)
 #define PROJ_NAME_LEN   32
 #define TASK_ID_LEN     24   // Todoist task id
-#define TASK_TITLE_LEN  64
+#define TASK_TITLE_LEN  128  // full task text for the detail view (was 64)
+#define TASK_DUE_LEN    32   // short human-readable due label, e.g. "26 jul 08:00"
 
 // Load state of the currently-displayed list (projects or tasks).
 #define LOAD_LOADING       0
@@ -29,6 +30,7 @@ typedef struct {
 typedef struct {
   char id[TASK_ID_LEN];
   char title[TASK_TITLE_LEN];
+  char due[TASK_DUE_LEN];   // "" when the task has no due date
   bool done;
 } Task;
 
