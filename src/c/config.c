@@ -6,6 +6,7 @@
 static void (*s_change_cb)(void) = NULL;
 
 static int  s_lang = LANG_EN;
+static int  s_font_size = FONT_SIZE_MEDIUM;
 static int  s_start_view = START_VIEW_OVERVIEW;
 static char s_default_proj_id[PROJ_ID_LEN]   = "";
 static char s_default_proj_name[PROJ_NAME_LEN] = "";
@@ -36,7 +37,13 @@ static int resolve_lang(int stored) {
   return detect_locale_lang();
 }
 
+// Falls back to the default for anything outside the select's options.
+static int resolve_font_size(int stored) {
+  return (stored >= FONT_SIZE_SMALL && stored <= FONT_SIZE_LARGE) ? stored : FONT_SIZE_MEDIUM;
+}
+
 int         config_lang(void)                { return s_lang; }
+int         config_font_size(void)           { return s_font_size; }
 int         config_start_view(void)          { return s_start_view; }
 const char *config_default_project_id(void)  { return s_default_proj_id; }
 const char *config_default_project_name(void){ return s_default_proj_name; }
@@ -47,6 +54,9 @@ void config_load(void) {
   // Default (nothing stored yet) is LANG_AUTO -> follow the watch's locale.
   int stored = persist_exists(PERSIST_LANG) ? persist_read_int(PERSIST_LANG) : LANG_AUTO;
   s_lang = resolve_lang(stored);
+  if (persist_exists(PERSIST_FONT_SIZE)) {
+    s_font_size = resolve_font_size(persist_read_int(PERSIST_FONT_SIZE));
+  }
   if (persist_exists(PERSIST_START_VIEW)) {
     s_start_view = persist_read_int(PERSIST_START_VIEW);
     if (s_start_view < 0 || s_start_view > START_VIEW_PROJECT) {
@@ -120,6 +130,11 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     int v = t->value->int32;                 // may be LANG_AUTO
     persist_write_int(PERSIST_LANG, v);
     s_lang = resolve_lang(v);
+  }
+
+  if ((t = dict_find(iter, MESSAGE_KEY_FONT_SIZE))) {
+    s_font_size = resolve_font_size(t->value->int32);
+    persist_write_int(PERSIST_FONT_SIZE, s_font_size);
   }
 
   // Persisted quick-launch settings from Clay.

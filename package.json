@@ -1,7 +1,7 @@
 {
   "name": "pebbledoist",
   "author": "mrtruebeliever",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "license": "MIT",
   "keywords": ["pebble-app"],
   "private": true,
@@ -26,6 +26,7 @@
       "TODOIST_TOKEN",
       "PROJECTS_SEL",
       "LANGUAGE",
+      "FONT_SIZE",
       "START_VIEW",
       "DEFAULT_PROJECT",
       "DEFAULT_PROJECT_ID",

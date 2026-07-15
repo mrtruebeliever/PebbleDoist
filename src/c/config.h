@@ -6,6 +6,12 @@
 #define PERSIST_DEFAULT_PROJ_ID  2
 #define PERSIST_DEFAULT_PROJ_NM  3
 #define PERSIST_LANG             4
+#define PERSIST_FONT_SIZE        5
+
+// Task-list text size (mirrors the Clay FONT_SIZE select).
+#define FONT_SIZE_SMALL   0
+#define FONT_SIZE_MEDIUM  1  // default
+#define FONT_SIZE_LARGE   2
 
 // Quick-Launch start view (mirrors the Clay START_VIEW select).
 #define START_VIEW_OVERVIEW  0  // project overview (main menu)
@@ -17,6 +23,9 @@ void config_load(void);
 
 // Current UI language index (Lang from i18n.h).
 int         config_lang(void);
+
+// Text size of the task-list rows (FONT_SIZE_* above).
+int         config_font_size(void);
 
 // Current quick-launch settings (valid after config_load / config_inbox_received).
 int         config_start_view(void);

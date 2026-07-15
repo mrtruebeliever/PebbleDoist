@@ -31,6 +31,26 @@ static int       s_marq_pause  = 0;
 // Number of non-task rows above the task rows ("new task" row for real projects).
 static int add_rows(void) { return s_is_today ? 0 : 1; }
 
+// Layout of a task row for the configured text size. text_h stays below two line
+// heights so a long title is ellipsized/marqueed on one line instead of wrapping.
+typedef struct {
+  GFont   font;
+  int16_t row_h;
+  int16_t text_y;
+  int16_t text_h;
+} RowMetrics;
+
+static RowMetrics row_metrics(void) {
+  switch (config_font_size()) {
+    case FONT_SIZE_SMALL:
+      return (RowMetrics){ fonts_get_system_font(FONT_KEY_GOTHIC_14), 36, 4, 22 };
+    case FONT_SIZE_LARGE:
+      return (RowMetrics){ fonts_get_system_font(FONT_KEY_GOTHIC_24), 54, 7, 34 };
+    default:
+      return (RowMetrics){ fonts_get_system_font(FONT_KEY_GOTHIC_18), 44, 4, 28 };
+  }
+}
+
 // True when the list should show its rows: loaded, or refreshing while cached
 // rows are still present (stale-while-revalidate — avoids a loading flash).
 static bool list_ready(void) {
@@ -103,8 +123,13 @@ static uint16_t get_num_rows(MenuLayer *ml, uint16_t section, void *ctx) {
   return add_rows() + (s_is_today ? 1 : 0);        // empty state
 }
 
+// Only task rows follow the text-size setting; the add and status rows keep the
+// fixed height their two-line (title + subtitle) layout needs.
 static int16_t get_cell_height(MenuLayer *ml, MenuIndex *ci, void *ctx) {
-  return 44;
+  if (!list_ready()) return 44;
+  if (!s_is_today && ci->row == 0) return 44;
+  if (data_task_count() == 0) return 44;
+  return row_metrics().row_h;
 }
 
 static int16_t get_header_height(MenuLayer *ml, uint16_t section, void *ctx) {
@@ -138,18 +163,18 @@ static void draw_add_row(GContext *ctx, const Layer *cell) {
 static void draw_task_row(GContext *ctx, const Layer *cell, Task *t) {
   GRect b = layer_get_bounds(cell);
   bool hl = menu_cell_layer_is_highlighted(cell);
-  GFont f = fonts_get_system_font(FONT_KEY_GOTHIC_18);
+  RowMetrics m = row_metrics();
 
   graphics_context_set_text_color(ctx, GColorBlack);
   if (hl) {
     // Selected row: marquee long titles horizontally (no ellipsis).
-    graphics_draw_text(ctx, t->title, f, GRect(34 - s_marq_offset, 4, 4000, 36),
+    graphics_draw_text(ctx, t->title, m.font, GRect(34 - s_marq_offset, m.text_y, 4000, m.text_h),
                        GTextOverflowModeFill, GTextAlignmentLeft, NULL);
     // Re-paint the checkbox column so scrolled text never runs under it.
     graphics_context_set_fill_color(ctx, theme_accent());
     graphics_fill_rect(ctx, GRect(0, 0, 34, b.size.h), 0, GCornerNone);
   } else {
-    graphics_draw_text(ctx, t->title, f, GRect(34, 4, b.size.w - 40, 36),
+    graphics_draw_text(ctx, t->title, m.font, GRect(34, m.text_y, b.size.w - 40, m.text_h),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   }
 
@@ -221,11 +246,12 @@ static void marquee_tick(void *ctx) {
     if (trow >= 0 && trow < data_task_count()) {
       Task *t = data_task(trow);
       if (t && t->id[0]) {
+        RowMetrics m = row_metrics();
         GRect fr = layer_get_frame(menu_layer_get_layer(s_menu));
         int avail = fr.size.w - 40;
         GSize ts = graphics_text_layout_get_content_size(
-            t->title, fonts_get_system_font(FONT_KEY_GOTHIC_18),
-            GRect(0, 0, 4000, 36), GTextOverflowModeFill, GTextAlignmentLeft);
+            t->title, m.font,
+            GRect(0, 0, 4000, m.text_h), GTextOverflowModeFill, GTextAlignmentLeft);
         int maxoff = ts.w - avail;
         if (maxoff > 0) {
           scrolled = true;

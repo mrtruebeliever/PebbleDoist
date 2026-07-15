@@ -43,6 +43,12 @@ function getAllProjects() {
   catch (e) { return []; }
 }
 
+// Task-list text size: 0=small, 1=medium (default), 2=large (mirrors config.h).
+function getFontSize() {
+  var v = parseInt(localStorage.getItem('FONT_SIZE'), 10);
+  return (v >= 0 && v <= 2) ? v : 1;
+}
+
 function getStartView() { return parseInt(localStorage.getItem('START_VIEW') || '0', 10) || 0; }
 function getDefId() { return localStorage.getItem('DEF_ID') || ''; }
 function getDefName() { return localStorage.getItem('DEF_NAME') || ''; }
@@ -543,6 +549,7 @@ function settingsSnapshot() {
     token: getToken(),
     sel: getSel(),
     langRaw: getLangRaw(),
+    fontSize: getFontSize(),
     startView: getStartView(),
     defId: getDefId(),
     tlEnabled: getTimelineEnabled()
@@ -574,6 +581,8 @@ Pebble.addEventListener('webviewclosed', function (e) {
   var sel = selectionFromRaw(pick('PROJECTS_SEL'), all);
   var lang = parseInt(pick('LANGUAGE'), 10);
   if (isNaN(lang)) { lang = 255; }  // 255 = Automatic (follow watch locale)
+  var fontSize = parseInt(pick('FONT_SIZE'), 10);
+  if (!(fontSize >= 0 && fontSize <= 2)) { fontSize = 1; }
   var startView = parseInt(pick('START_VIEW'), 10) || 0;
   var defId = (pick('DEFAULT_PROJECT') || '').toString();
   var defName = (defId === TODAY_ID) ? '' : nameForId(defId, all);
@@ -589,14 +598,17 @@ Pebble.addEventListener('webviewclosed', function (e) {
   localStorage.setItem('TOKEN', token);
   localStorage.setItem('SEL', JSON.stringify(sel));
   localStorage.setItem('LANG', String(lang));
+  localStorage.setItem('FONT_SIZE', String(fontSize));
   localStorage.setItem('START_VIEW', String(startView));
   localStorage.setItem('DEF_ID', defId);
   localStorage.setItem('DEF_NAME', defName);
   localStorage.setItem('TL_ENABLED', tlEnabled ? '1' : '0');
 
-  // Language + quick-launch settings go to the watch (persisted there); the token never does.
+  // Language, text size + quick-launch settings go to the watch (persisted there);
+  // the token never does.
   var msg = {};
   msg[keys.LANGUAGE] = lang;
+  msg[keys.FONT_SIZE] = fontSize;
   msg[keys.START_VIEW] = startView;
   msg[keys.DEFAULT_PROJECT_ID] = defId;
   msg[keys.DEFAULT_PROJECT_NAME] = defName;
