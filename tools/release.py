@@ -1,29 +1,31 @@
 #!/usr/bin/env python3
 """Builds a size-optimized release .pbw for the Pebble appstore.
 
-`pebble build` ships an unminified webpack bundle plus its source map, which
-together are ~90% of the .pbw. This script:
+Project-agnostic: run it from any Pebble project's root (`python3 tools/release.py`).
+`pebble build` ships an unminified webpack bundle plus its source map, which together
+are ~90% of the .pbw. This script:
   - minifies the JavaScript bundle (pebble-js-app.js) with terser,
   - drops the source map (pebble-js-app.js.map) and its reference.
 Everything else (app binary, resources, manifest, appinfo) is copied byte-for-byte,
 so the per-platform manifest checksums (which only cover the binary + resources)
 stay valid. Entries are stored uncompressed, matching how `pebble build` writes the
-.pbw.
+.pbw. A project with no phone-side JS simply gets the source map dropped.
 
-Requires node/npx (terser is fetched on first run, so the first run needs network).
+Requires node/npx for the minify step (terser is fetched on first run, so the first
+run needs network).
 
-Usage:  python3 tools/release.py      # runs `pebble build` first
-Output: build/PebbleDoist-release.pbw # upload THIS to the store
+Usage:  python3 tools/release.py
+Output: build/<AppName>-release.pbw   # upload THIS to the store
 """
+import glob
 import os
-import sys
 import subprocess
+import sys
 import tempfile
 import zipfile
 
+# Project root = the directory that contains this tools/ folder, so it works from any cwd.
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, "build", "PebbleDoist.pbw")
-OUT = os.path.join(ROOT, "build", "PebbleDoist-release.pbw")
 JS = "pebble-js-app.js"
 MAP = "pebble-js-app.js.map"
 
@@ -32,23 +34,23 @@ def run(cmd, **kw):
     return subprocess.run(cmd, cwd=ROOT, check=True, **kw)
 
 
-def main():
-    run(["pebble", "build"])
-    if not os.path.exists(SRC):
-        sys.exit("build failed: %s not found" % SRC)
+def find_pbw():
+    pbws = [p for p in glob.glob(os.path.join(ROOT, "build", "*.pbw"))
+            if not p.endswith("-release.pbw")]
+    if len(pbws) != 1:
+        sys.exit("expected exactly one build/*.pbw, found: %s" % pbws)
+    return pbws[0]
 
-    zin = zipfile.ZipFile(SRC)
-    js_src = zin.read(JS)
 
-    # Minify (compress + mangle); terser also strips the sourceMappingURL comment.
+def minify(js_src):
     with tempfile.NamedTemporaryFile("wb", suffix=".js", delete=False) as tf:
         tf.write(js_src)
-        tmp_in = tf.name
+        tin = tf.name
     try:
-        p = subprocess.run(["npx", "--yes", "terser", tmp_in, "-c", "-m"],
+        p = subprocess.run(["npx", "--yes", "terser", tin, "-c", "-m"],
                            stdout=subprocess.PIPE, cwd=ROOT)
     finally:
-        os.unlink(tmp_in)
+        os.unlink(tin)
     if p.returncode != 0 or not p.stdout:
         sys.exit("terser failed (returncode %s)" % p.returncode)
     js_min = p.stdout
@@ -56,24 +58,39 @@ def main():
     # Sanity check: the minified bundle must still parse.
     with tempfile.NamedTemporaryFile("wb", suffix=".js", delete=False) as tf:
         tf.write(js_min)
-        tmp_out = tf.name
+        tout = tf.name
     try:
-        run(["node", "--check", tmp_out])
+        run(["node", "--check", tout])
     finally:
-        os.unlink(tmp_out)
+        os.unlink(tout)
+    return js_min
 
-    with zipfile.ZipFile(OUT, "w", zipfile.ZIP_STORED) as zout:
+
+def main():
+    run(["pebble", "build"])
+    src = find_pbw()
+    out = src[:-len(".pbw")] + "-release.pbw"
+
+    zin = zipfile.ZipFile(src)
+    names = set(zin.namelist())
+    js_src = zin.read(JS) if JS in names else None
+    js_min = minify(js_src) if js_src is not None else None
+
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED) as zout:
         for item in zin.infolist():
             if item.filename == MAP:
                 continue  # drop the source map
-            data = js_min if item.filename == JS else zin.read(item.filename)
+            data = js_min if (item.filename == JS and js_min is not None) else zin.read(item.filename)
             zout.writestr(item.filename, data)
     zin.close()
 
-    src_sz, out_sz = os.path.getsize(SRC), os.path.getsize(OUT)
-    print("pebble-js-app.js: %d -> %d bytes" % (len(js_src), len(js_min)))
+    src_sz, out_sz = os.path.getsize(src), os.path.getsize(out)
+    if js_src is not None:
+        print("%s: %d -> %d bytes" % (JS, len(js_src), len(js_min)))
+    else:
+        print("no %s in the .pbw (nothing to minify); dropped source map only" % JS)
     print("pbw: %d -> %d bytes (%.0f%% smaller)" % (src_sz, out_sz, 100 * (1 - out_sz / src_sz)))
-    print("wrote", OUT)
+    print("wrote", out)
 
 
 if __name__ == "__main__":
