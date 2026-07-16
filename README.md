@@ -29,7 +29,7 @@ stays on the phone and is never sent to the watch.
   **Labels** row. The accent **top bar** shows the app icon, where you are, the number of open
   tasks and the time.
 - **Today** — everything due today or overdue; items are prefixed with their list name
-  (e.g. `Work · Review the quote`). Every task row shows its **due date** on the right.
+  (e.g. `Work · Review the quote`). Each task row shows its **due date** on a line under the title.
 - **Labels** — open **Labels** to browse your Todoist labels; pick one to see every task
   carrying it, across all your lists.
 - **Details** — select a task → **Details** to read its full title, deadline, **description**

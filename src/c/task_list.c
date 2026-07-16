@@ -39,55 +39,28 @@ static int       s_marq_pause  = 0;
 // Number of non-task rows above the task rows ("new task" row for real projects).
 static int add_rows(void) { return s_mode == TASK_LIST_PROJECT ? 1 : 0; }
 
-// Layout of a single-line task row for the configured text size. A selected row
-// marquees its title on one line; an unselected row with a title too long for one
-// line wraps it onto a second line (see get_cell_height / draw_task_row).
+// Layout of a task row for the configured text size. The title is drawn full width
+// on one line (ellipsized when too long); when the task has a due date it sits on a
+// small line at the bottom of the row (like the "dictate" subtitle under "+ New
+// task"). Rows are a fixed height per text size (compact, like the add row); a task
+// with no due date centres its title vertically instead of leaving a gap.
+#define DUE_LINE_H 16
 typedef struct {
   GFont   font;
-  int16_t row_h;     // height of a one-line row
-  int16_t text_y;    // top padding of the title text
-  int16_t text_h;    // height of one text line
-  int16_t line_h;    // extra height one more wrapped line adds
+  int16_t row_h;     // total row height
+  int16_t text_y;    // title top when a due line is present
+  int16_t text_h;    // title line height (also the marquee measure height)
 } RowMetrics;
 
 static RowMetrics row_metrics(void) {
   switch (config_font_size()) {
     case FONT_SIZE_SMALL:
-      return (RowMetrics){ fonts_get_system_font(FONT_KEY_GOTHIC_18), 34, 3, 24, 22 };
+      return (RowMetrics){ fonts_get_system_font(FONT_KEY_GOTHIC_18), 38, 2, 20 };
     case FONT_SIZE_LARGE:
-      return (RowMetrics){ fonts_get_system_font(FONT_KEY_GOTHIC_28), 48, 4, 34, 32 };
+      return (RowMetrics){ fonts_get_system_font(FONT_KEY_GOTHIC_28), 50, 3, 30 };
     default:
-      return (RowMetrics){ fonts_get_system_font(FONT_KEY_GOTHIC_24), 40, 4, 30, 28 };
+      return (RowMetrics){ fonts_get_system_font(FONT_KEY_GOTHIC_24), 44, 2, 26 };
   }
-}
-
-// Width available for the title text (row width minus the checkbox column + pad).
-static int title_avail(void) {
-  if (!s_menu) return 100;
-  return layer_get_frame(menu_layer_get_layer(s_menu)).size.w - 40;
-}
-
-// Pixel width of the small gray due label drawn at the right of an unselected row
-// (0 when the task has no due date). Capped so a long due can't crowd out the title.
-#define DUE_GAP    6
-#define DUE_MAX_W  84
-static int due_width(const char *due) {
-  if (!due || !due[0]) return 0;
-  GSize s = graphics_text_layout_get_content_size(
-      due, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(0, 0, DUE_MAX_W, 20),
-      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
-  return s.w;
-}
-
-// True when `title` needs a second line at width `avail` in font `m.font`, i.e. the
-// unselected row should wrap it onto two lines instead of ellipsizing on one.
-static bool title_two_line(const char *title, RowMetrics m, int avail) {
-  if (!title || !title[0] || avail <= 0) return false;
-  GSize s = graphics_text_layout_get_content_size(
-      title, m.font, GRect(0, 0, avail, 1000),
-      GTextOverflowModeWordWrap, GTextAlignmentLeft);
-  // One line's content height is ~m.text_h; anything taller wrapped to 2+ lines.
-  return s.h > m.text_h + 2;
 }
 
 // True when the list should show its rows: loaded, or refreshing while cached
@@ -232,18 +205,9 @@ static int16_t get_cell_height(MenuLayer *ml, MenuIndex *ci, void *ctx) {
   if (!list_ready()) return 44;
   if (s_mode == TASK_LIST_PROJECT && ci->row == 0) return 44;
   if (data_task_count() == 0) return 44;
-  RowMetrics m = row_metrics();
-  Task *t = data_task(ci->row - add_rows());
-  if (t && !t->done) {
-    // The due label (shown on unselected rows) narrows the title, which can push
-    // it onto a second line — account for it here so the height matches the draw.
-    // A pending-done row is drawn on one line, so it keeps the single-line height.
-    int avail = title_avail();
-    int dw = due_width(t->due);
-    if (dw) avail -= dw + DUE_GAP;
-    if (title_two_line(t->title, m, avail)) return m.row_h + m.line_h;
-  }
-  return m.row_h;
+  // Fixed height per text size, so a row doesn't change when a due date is
+  // added/removed or when it is quick-completed.
+  return row_metrics().row_h;
 }
 
 static void draw_add_row(GContext *ctx, const Layer *cell) {
@@ -268,17 +232,18 @@ static void draw_done_row(GContext *ctx, GRect b, Task *t, bool hl, RowMetrics m
   GSize us = graphics_text_layout_get_content_size(
       undo, hint_font, GRect(0, 0, 90, 20), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
   int uw = us.w;
-  int title_w = b.size.w - 40 - uw - DUE_GAP;
+  int title_w = b.size.w - 40 - uw - 6;   // leave a small gap before the hint
 
+  int ty = (b.size.h - m.text_h) / 2;   // no due line here — centre it vertically
   GColor dim = hl ? GColorBlack : GColorDarkGray;
   graphics_context_set_text_color(ctx, dim);
-  graphics_draw_text(ctx, t->title, m.font, GRect(34, m.text_y, title_w, m.text_h),
+  graphics_draw_text(ctx, t->title, m.font, GRect(34, ty, title_w, m.text_h),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   // Strike-through, only as wide as the (clamped) title text.
   GSize tsz = graphics_text_layout_get_content_size(
       t->title, m.font, GRect(0, 0, 4000, m.text_h), GTextOverflowModeFill, GTextAlignmentLeft);
   int strike_w = tsz.w < title_w ? tsz.w : title_w;
-  int sy = m.text_y + m.text_h / 2;
+  int sy = ty + m.text_h / 2;
   graphics_context_set_stroke_color(ctx, dim);
   graphics_draw_line(ctx, GPoint(34, sy), GPoint(34 + strike_w, sy));
 
@@ -301,30 +266,29 @@ static void draw_task_row(GContext *ctx, const Layer *cell, Task *t) {
 
   if (t->done) { draw_done_row(ctx, b, t, hl, m); return; }
 
+  // Title: full width on one line. With a due date it sits near the top (due goes on
+  // the bottom line); without one it is vertically centred so the row has no gap.
+  bool has_due = t->due[0];
+  int ty = has_due ? m.text_y : (b.size.h - m.text_h) / 2;
   graphics_context_set_text_color(ctx, GColorBlack);
   if (hl) {
-    // Selected row: marquee the title on one line (no ellipsis), vertically
-    // centered so it sits nicely even when the row is two lines tall.
-    int y = (b.size.h - m.text_h) / 2;
-    graphics_draw_text(ctx, t->title, m.font, GRect(34 - s_marq_offset, y, 4000, m.text_h),
+    // Selected row: marquee the title on one line (no ellipsis).
+    graphics_draw_text(ctx, t->title, m.font, GRect(34 - s_marq_offset, ty, 4000, m.text_h),
                        GTextOverflowModeFill, GTextAlignmentLeft, NULL);
     // Re-paint the checkbox column so scrolled text never runs under it.
     graphics_context_set_fill_color(ctx, theme_accent());
     graphics_fill_rect(ctx, GRect(0, 0, 34, b.size.h), 0, GCornerNone);
   } else {
-    // Unselected row: a small gray due label at the right, and the title wrapped
-    // onto up to two lines in the remaining width (ellipsized beyond that).
-    int dw = due_width(t->due);
-    int title_w = b.size.w - 40 - (dw ? dw + DUE_GAP : 0);
-    graphics_draw_text(ctx, t->title, m.font,
-                       GRect(34, m.text_y, title_w, m.text_h + m.line_h),
+    graphics_draw_text(ctx, t->title, m.font, GRect(34, ty, b.size.w - 40, m.text_h),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-    if (dw) {
-      graphics_context_set_text_color(ctx, GColorDarkGray);
-      graphics_draw_text(ctx, t->due, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                         GRect(b.size.w - 4 - dw, (b.size.h - 16) / 2, dw, 16),
-                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-    }
+  }
+
+  // Due date: a small gray line at the bottom of the row (shown selected or not).
+  if (has_due) {
+    graphics_context_set_text_color(ctx, hl ? GColorBlack : GColorDarkGray);
+    graphics_draw_text(ctx, t->due, fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                       GRect(34, b.size.h - DUE_LINE_H - 1, b.size.w - 38, DUE_LINE_H),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   }
 
   // Empty checkbox, drawn last so it stays visible on the scrolling row.

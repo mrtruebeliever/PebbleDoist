@@ -4,6 +4,17 @@ All notable changes to PebbleDoist are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-07-16
+
+### Changed
+
+- **Task rows redesigned** — the title now uses the **full row width** and only ellipsizes
+  when genuinely long; the **due date sits on a small line below the title** (like the
+  "dictate" subtitle under "+ New task"). Rows are a **fixed, compact height** per text size,
+  so a task with a due date is the same height as one without — and a task with no due date
+  **centres its title** vertically. Selecting a long task still scrolls (marquees) the full
+  title while its due stays put.
+
 ## [1.3.0] - 2026-07-16
 
 ### Added
