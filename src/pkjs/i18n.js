@@ -6,7 +6,7 @@ var L = {
   en: {
     token_desc: 'Enter your Todoist API token (Todoist → Settings → Integrations → Developer). It stays on your phone only and is never sent to the watch.',
     token_label: 'API token', language: 'Language', automatic: 'Automatic (watch language)',
-    font_label: 'Text size', font_desc: 'Size of the task titles in a task list.',
+    font_label: 'Task titles size',
     font_small: 'Small', font_medium: 'Medium', font_large: 'Large',
     qc_label: 'Quick-complete', qc_desc: 'Press Select on a task to complete it right away (long-press opens the menu). Off: Select opens the menu.',
     projects_heading: 'Projects on the watch', projects_desc: 'Choose which lists appear on the watch.', projects_label: 'Projects',
@@ -20,7 +20,7 @@ var L = {
   nl: {
     token_desc: 'Vul je Todoist API-token in (Todoist → Instellingen → Integraties → Ontwikkelaar). De token blijft alleen op je telefoon en wordt nooit naar het horloge gestuurd.',
     token_label: 'API-token', language: 'Taal', automatic: 'Automatisch (horlogetaal)',
-    font_label: 'Tekstgrootte', font_desc: 'Grootte van de taaktitels in een takenlijst.',
+    font_label: 'Taaktitelgrootte',
     font_small: 'Klein', font_medium: 'Normaal', font_large: 'Groot',
     qc_label: 'Snel afvinken', qc_desc: 'Druk op Select bij een taak om ze meteen af te vinken (lang indrukken opent het menu). Uit: Select opent het menu.',
     projects_heading: 'Projecten op het horloge', projects_desc: 'Kies welke lijsten op de watch verschijnen.', projects_label: 'Projecten',
@@ -34,7 +34,7 @@ var L = {
   fr: {
     token_desc: 'Saisissez votre jeton API Todoist (Todoist → Paramètres → Intégrations → Développeur). Il reste uniquement sur votre téléphone et n\'est jamais envoyé à la montre.',
     token_label: 'Jeton API', language: 'Langue', automatic: 'Automatique (langue de la montre)',
-    font_label: 'Taille du texte', font_desc: 'Taille des titres de tâches dans une liste.',
+    font_label: 'Taille des titres',
     font_small: 'Petit', font_medium: 'Moyen', font_large: 'Grand',
     qc_label: 'Complétion rapide', qc_desc: 'Appuyez sur Sélection sur une tâche pour la terminer aussitôt (appui long ouvre le menu). Désactivé : Sélection ouvre le menu.',
     projects_heading: 'Projets sur la montre', projects_desc: 'Choisissez les listes à afficher sur la montre.', projects_label: 'Projets',
@@ -48,7 +48,7 @@ var L = {
   de: {
     token_desc: 'Gib deinen Todoist API-Token ein (Todoist → Einstellungen → Integrationen → Entwickler). Er bleibt nur auf deinem Telefon und wird nie an die Uhr gesendet.',
     token_label: 'API-Token', language: 'Sprache', automatic: 'Automatisch (Uhrsprache)',
-    font_label: 'Textgröße', font_desc: 'Größe der Aufgabentitel in einer Aufgabenliste.',
+    font_label: 'Aufgabentitelgröße',
     font_small: 'Klein', font_medium: 'Mittel', font_large: 'Groß',
     qc_label: 'Schnell-Erledigen', qc_desc: 'Auf einer Aufgabe Select drücken, um sie sofort zu erledigen (langer Druck öffnet das Menü). Aus: Select öffnet das Menü.',
     projects_heading: 'Projekte auf der Uhr', projects_desc: 'Wähle, welche Listen auf der Uhr erscheinen.', projects_label: 'Projekte',
@@ -62,7 +62,7 @@ var L = {
   es: {
     token_desc: 'Introduce tu token de API de Todoist (Todoist → Ajustes → Integraciones → Desarrollador). Permanece solo en tu teléfono y nunca se envía al reloj.',
     token_label: 'Token de API', language: 'Idioma', automatic: 'Automático (idioma del reloj)',
-    font_label: 'Tamaño del texto', font_desc: 'Tamaño de los títulos de tareas en una lista.',
+    font_label: 'Tamaño de títulos',
     font_small: 'Pequeño', font_medium: 'Mediano', font_large: 'Grande',
     qc_label: 'Completar rápido', qc_desc: 'Pulsa Select en una tarea para completarla al instante (mantén pulsado para el menú). Desactivado: Select abre el menú.',
     projects_heading: 'Proyectos en el reloj', projects_desc: 'Elige qué listas aparecen en el reloj.', projects_label: 'Proyectos',
@@ -104,7 +104,6 @@ function buildConfig(langIdx, allProjects, snap) {
           { label: 'Deutsch', value: '3' },
           { label: 'Español', value: '4' }
         ] },
-      { type: 'text', defaultValue: s.font_desc },
       { type: 'select', messageKey: 'FONT_SIZE', label: s.font_label,
         defaultValue: String(snap.fontSize != null ? snap.fontSize : 1),
         options: [
@@ -112,9 +111,9 @@ function buildConfig(langIdx, allProjects, snap) {
           { label: s.font_medium, value: '1' },
           { label: s.font_large, value: '2' }
         ] },
-      { type: 'text', defaultValue: s.qc_desc },
       { type: 'toggle', messageKey: 'QUICK_COMPLETE', label: s.qc_label,
-        defaultValue: !!snap.quickComplete }
+        defaultValue: !!snap.quickComplete },
+      { type: 'text', defaultValue: s.qc_desc }
     ] }
   ];
 

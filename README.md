@@ -70,7 +70,12 @@ to the watch.
 pebble clean && pebble build          # clean is required after messageKeys/resource changes
 pebble install --emulator emery       # emery emulator (dictation needs a real device)
 pebble install --cloudpebble          # real PT2 via Dev Connect
+python3 tools/release.py              # size-optimized build/PebbleDoist-release.pbw for the store
 ```
+
+`tools/release.py` produces the `.pbw` to upload to the appstore: it minifies the JS bundle
+and drops the source map, roughly halving the download (needs `node`/`npx`; terser is fetched
+on first run).
 
 The emulator's JS reaches the real internet, so with a real token you can test the
 lists, add and complete in the emulator. **Dictation needs a real device** (the emulator
