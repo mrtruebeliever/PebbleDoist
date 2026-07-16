@@ -67,6 +67,10 @@ def minify(js_src):
 
 
 def main():
+    # Clean first: an incremental build does not regenerate appinfo.json for a
+    # version-only bump, which would ship the old versionLabel and the store would
+    # reject the upload as a duplicate version.
+    run(["pebble", "clean"])
     run(["pebble", "build"])
     src = find_pbw()
     out = src[:-len(".pbw")] + "-release.pbw"
