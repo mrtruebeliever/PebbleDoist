@@ -24,6 +24,7 @@ typedef enum {
   STR_REFRESH,        // "Refresh"
   STR_COMPLETE,       // "Complete"
   STR_DELETE,         // "Delete"
+  STR_UNDO,           // "Undo" (quick-complete hint)
   STR_LOADING_T,      // "Loading..."
   STR_LOADING_S,      // "Please wait"
   STR_ERROR_T,        // "No connection"
@@ -36,7 +37,11 @@ typedef enum {
   STR_N_TASK,         // "%d task"   (printf format, one arg)
   STR_N_TASKS,        // "%d tasks"  (printf format, one arg)
   STR_DETAILS,        // "Details"
+  STR_CONFIRM_DEL,    // "Tap to confirm" (delete confirmation)
   STR_DUE,            // "Deadline"
+  STR_LABELS,         // "Labels"
+  STR_LABELS_SUB,     // "filter by label"
+  STR_NO_LABELS,      // "No labels"
   STR_COUNT,
 } StrId;
 

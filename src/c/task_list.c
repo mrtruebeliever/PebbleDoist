@@ -6,19 +6,27 @@
 #include "theme.h"
 #include "dictation_flow.h"
 #include "task_detail.h"
+#include "header_bar.h"
 
-static Window         *s_window = NULL;
-static MenuLayer      *s_menu = NULL;
-static StatusBarLayer *s_status_bar = NULL;
-static Layer          *s_refresh_bar = NULL;   // thin accent line shown while refreshing
-static bool            s_shown = false;
+static Window    *s_window = NULL;
+static MenuLayer *s_menu = NULL;
+static Layer     *s_header = NULL;
+static Layer     *s_refresh_bar = NULL;   // thin accent line shown while refreshing
+static bool       s_shown = false;
 
-static char s_project_id[PROJ_ID_LEN];
+static char s_project_id[LIST_ID_LEN];
 static char s_title[PROJ_NAME_LEN];
-static bool s_is_today;
+static TaskListMode s_mode;
 
 static char s_sel_task_id[TASK_ID_LEN];   // task targeted by the open ActionMenu
 static Task s_sel_task;                    // snapshot for the detail view
+
+// Quick-complete deferred-undo: a Select-completed task is shown "done" for a short
+// window before it is actually completed on the server, so a second Select undoes it
+// (nothing was sent yet). Only one task can be pending at a time.
+static char      s_pending_id[TASK_ID_LEN] = "";
+static AppTimer *s_undo_timer = NULL;
+#define UNDO_WINDOW_MS 3000
 
 // Marquee state for the selected task row's title (see marquee_tick).
 static AppTimer *s_marq_timer = NULL;
@@ -29,26 +37,57 @@ static int       s_marq_pause  = 0;
 #define MARQ_PAUSE   14
 
 // Number of non-task rows above the task rows ("new task" row for real projects).
-static int add_rows(void) { return s_is_today ? 0 : 1; }
+static int add_rows(void) { return s_mode == TASK_LIST_PROJECT ? 1 : 0; }
 
-// Layout of a task row for the configured text size. text_h stays below two line
-// heights so a long title is ellipsized/marqueed on one line instead of wrapping.
+// Layout of a single-line task row for the configured text size. A selected row
+// marquees its title on one line; an unselected row with a title too long for one
+// line wraps it onto a second line (see get_cell_height / draw_task_row).
 typedef struct {
   GFont   font;
-  int16_t row_h;
-  int16_t text_y;
-  int16_t text_h;
+  int16_t row_h;     // height of a one-line row
+  int16_t text_y;    // top padding of the title text
+  int16_t text_h;    // height of one text line
+  int16_t line_h;    // extra height one more wrapped line adds
 } RowMetrics;
 
 static RowMetrics row_metrics(void) {
   switch (config_font_size()) {
     case FONT_SIZE_SMALL:
-      return (RowMetrics){ fonts_get_system_font(FONT_KEY_GOTHIC_14), 36, 4, 22 };
+      return (RowMetrics){ fonts_get_system_font(FONT_KEY_GOTHIC_18), 34, 3, 24, 22 };
     case FONT_SIZE_LARGE:
-      return (RowMetrics){ fonts_get_system_font(FONT_KEY_GOTHIC_24), 54, 7, 34 };
+      return (RowMetrics){ fonts_get_system_font(FONT_KEY_GOTHIC_28), 48, 4, 34, 32 };
     default:
-      return (RowMetrics){ fonts_get_system_font(FONT_KEY_GOTHIC_18), 44, 4, 28 };
+      return (RowMetrics){ fonts_get_system_font(FONT_KEY_GOTHIC_24), 40, 4, 30, 28 };
   }
+}
+
+// Width available for the title text (row width minus the checkbox column + pad).
+static int title_avail(void) {
+  if (!s_menu) return 100;
+  return layer_get_frame(menu_layer_get_layer(s_menu)).size.w - 40;
+}
+
+// Pixel width of the small gray due label drawn at the right of an unselected row
+// (0 when the task has no due date). Capped so a long due can't crowd out the title.
+#define DUE_GAP    6
+#define DUE_MAX_W  84
+static int due_width(const char *due) {
+  if (!due || !due[0]) return 0;
+  GSize s = graphics_text_layout_get_content_size(
+      due, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(0, 0, DUE_MAX_W, 20),
+      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+  return s.w;
+}
+
+// True when `title` needs a second line at width `avail` in font `m.font`, i.e. the
+// unselected row should wrap it onto two lines instead of ellipsizing on one.
+static bool title_two_line(const char *title, RowMetrics m, int avail) {
+  if (!title || !title[0] || avail <= 0) return false;
+  GSize s = graphics_text_layout_get_content_size(
+      title, m.font, GRect(0, 0, avail, 1000),
+      GTextOverflowModeWordWrap, GTextAlignmentLeft);
+  // One line's content height is ~m.text_h; anything taller wrapped to 2+ lines.
+  return s.h > m.text_h + 2;
 }
 
 // True when the list should show its rows: loaded, or refreshing while cached
@@ -58,21 +97,78 @@ static bool list_ready(void) {
   return s == LOAD_OK || (s == LOAD_LOADING && data_task_count() > 0);
 }
 
+// --- Quick-complete deferred undo --------------------------------------------
+
+// Returns the task with this id (NULL if not present), for toggling its done flag.
+static Task *task_by_id(const char *id) {
+  int n = data_task_count();
+  for (int i = 0; i < n; i++) {
+    Task *t = data_task(i);
+    if (t && strcmp(t->id, id) == 0) return t;
+  }
+  return NULL;
+}
+
+// Actually complete the pending task on the server and drop it from the list.
+static void pending_commit(void) {
+  if (s_undo_timer) { app_timer_cancel(s_undo_timer); s_undo_timer = NULL; }
+  if (s_pending_id[0]) {
+    config_close_task(s_pending_id);            // server completes; re-stream reconciles
+    data_remove_task_by_id(s_pending_id);       // optimistic removal (no loading flash)
+    s_pending_id[0] = '\0';
+    task_list_reload();
+    header_bar_refresh();
+  }
+}
+
+// Cancel the pending completion within the undo window — nothing was sent yet.
+static void pending_undo(void) {
+  if (s_undo_timer) { app_timer_cancel(s_undo_timer); s_undo_timer = NULL; }
+  if (s_pending_id[0]) {
+    Task *t = task_by_id(s_pending_id);
+    if (t) t->done = false;
+    s_pending_id[0] = '\0';
+    task_list_reload();
+    header_bar_refresh();
+  }
+}
+
+static void undo_timer_cb(void *ctx) {
+  s_undo_timer = NULL;   // fired
+  pending_commit();
+}
+
+// Mark a task done and start the undo window; the completion is only sent when the
+// window elapses (undo_timer_cb) — so a second Select before then cancels it.
+static void quick_complete(int trow) {
+  Task *t = data_task(trow);
+  if (!t || !t->id[0]) return;
+  if (s_pending_id[0] && strcmp(s_pending_id, t->id) != 0) { pending_commit(); }
+  t->done = true;
+  strncpy(s_pending_id, t->id, sizeof(s_pending_id) - 1);
+  s_pending_id[sizeof(s_pending_id) - 1] = '\0';
+  if (s_undo_timer) { app_timer_cancel(s_undo_timer); }
+  s_undo_timer = app_timer_register(UNDO_WINDOW_MS, undo_timer_cb, NULL);
+  task_list_reload();
+}
+
 // --- Afvinken (close) ActionMenu ---------------------------------------------
 
 static void close_performed(ActionMenu *menu, const ActionMenuItem *item, void *context) {
   if (s_sel_task_id[0]) {
     config_close_task(s_sel_task_id);
-    data_set_load_state(LOAD_LOADING);
+    data_remove_task_by_id(s_sel_task_id);   // optimistic — no loading flash
     task_list_reload();
+    header_bar_refresh();
   }
 }
 
 static void delete_performed(ActionMenu *menu, const ActionMenuItem *item, void *context) {
   if (s_sel_task_id[0]) {
     config_delete_task(s_sel_task_id);
-    data_set_load_state(LOAD_LOADING);
+    data_remove_task_by_id(s_sel_task_id);   // optimistic — no loading flash
     task_list_reload();
+    header_bar_refresh();
   }
 }
 
@@ -85,14 +181,19 @@ static void close_menu_did_close(ActionMenu *menu, const ActionMenuItem *perform
 }
 
 static void open_task_menu(Task *t) {
+  pending_commit();  // finalize any quick-complete before showing the menu
   s_sel_task = *t;   // snapshot for the detail view (survives a background refresh)
   strncpy(s_sel_task_id, t->id, sizeof(s_sel_task_id) - 1);
   s_sel_task_id[sizeof(s_sel_task_id) - 1] = '\0';
 
+  // Complete first (the most common action, so it's the default-highlighted item);
+  // Delete opens a one-item confirm level so it can't fire on an accidental scroll.
   ActionMenuLevel *root = action_menu_level_create(3);
-  action_menu_level_add_action(root, i18n(STR_DETAILS), detail_performed, NULL);
   action_menu_level_add_action(root, i18n(STR_COMPLETE), close_performed, NULL);
-  action_menu_level_add_action(root, i18n(STR_DELETE), delete_performed, NULL);
+  action_menu_level_add_action(root, i18n(STR_DETAILS), detail_performed, NULL);
+  ActionMenuLevel *confirm = action_menu_level_create(1);
+  action_menu_level_add_action(confirm, i18n(STR_CONFIRM_DEL), delete_performed, NULL);
+  action_menu_level_add_child(root, confirm, i18n(STR_DELETE));
   ActionMenuConfig cfg = {
     .root_level = root,
     .colors = { .background = theme_accent(), .foreground = GColorBlack },
@@ -120,30 +221,29 @@ static uint16_t get_num_rows(MenuLayer *ml, uint16_t section, void *ctx) {
   if (!list_ready()) return 1;                     // status row
   int tc = data_task_count();
   if (tc > 0) return add_rows() + tc;
-  return add_rows() + (s_is_today ? 1 : 0);        // empty state
+  // Empty: a project shows only its add row; Today/Label show an empty-state row.
+  return add_rows() + (s_mode == TASK_LIST_PROJECT ? 0 : 1);
 }
 
 // Only task rows follow the text-size setting; the add and status rows keep the
-// fixed height their two-line (title + subtitle) layout needs.
+// fixed height their two-line (title + subtitle) layout needs. A task row grows to
+// two lines when its (unselected) title is too long for one line.
 static int16_t get_cell_height(MenuLayer *ml, MenuIndex *ci, void *ctx) {
   if (!list_ready()) return 44;
-  if (!s_is_today && ci->row == 0) return 44;
+  if (s_mode == TASK_LIST_PROJECT && ci->row == 0) return 44;
   if (data_task_count() == 0) return 44;
-  return row_metrics().row_h;
-}
-
-static int16_t get_header_height(MenuLayer *ml, uint16_t section, void *ctx) {
-  return 26;
-}
-
-static void draw_header(GContext *ctx, const Layer *cell, uint16_t section, void *c) {
-  GRect b = layer_get_bounds(cell);
-  graphics_context_set_fill_color(ctx, theme_accent());
-  graphics_fill_rect(ctx, b, 0, GCornerNone);
-  graphics_context_set_text_color(ctx, GColorBlack);
-  graphics_draw_text(ctx, s_title, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     GRect(8, -2, b.size.w - 12, 24),
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  RowMetrics m = row_metrics();
+  Task *t = data_task(ci->row - add_rows());
+  if (t && !t->done) {
+    // The due label (shown on unselected rows) narrows the title, which can push
+    // it onto a second line — account for it here so the height matches the draw.
+    // A pending-done row is drawn on one line, so it keeps the single-line height.
+    int avail = title_avail();
+    int dw = due_width(t->due);
+    if (dw) avail -= dw + DUE_GAP;
+    if (title_two_line(t->title, m, avail)) return m.row_h + m.line_h;
+  }
+  return m.row_h;
 }
 
 static void draw_add_row(GContext *ctx, const Layer *cell) {
@@ -160,22 +260,71 @@ static void draw_add_row(GContext *ctx, const Layer *cell) {
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 }
 
+// Draws a task that was just quick-completed and is inside its undo window: a
+// ticked checkbox, the title struck through, and an "Undo" hint on the right.
+static void draw_done_row(GContext *ctx, GRect b, Task *t, bool hl, RowMetrics m) {
+  GFont hint_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+  const char *undo = i18n(STR_UNDO);
+  GSize us = graphics_text_layout_get_content_size(
+      undo, hint_font, GRect(0, 0, 90, 20), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+  int uw = us.w;
+  int title_w = b.size.w - 40 - uw - DUE_GAP;
+
+  GColor dim = hl ? GColorBlack : GColorDarkGray;
+  graphics_context_set_text_color(ctx, dim);
+  graphics_draw_text(ctx, t->title, m.font, GRect(34, m.text_y, title_w, m.text_h),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  // Strike-through, only as wide as the (clamped) title text.
+  GSize tsz = graphics_text_layout_get_content_size(
+      t->title, m.font, GRect(0, 0, 4000, m.text_h), GTextOverflowModeFill, GTextAlignmentLeft);
+  int strike_w = tsz.w < title_w ? tsz.w : title_w;
+  int sy = m.text_y + m.text_h / 2;
+  graphics_context_set_stroke_color(ctx, dim);
+  graphics_draw_line(ctx, GPoint(34, sy), GPoint(34 + strike_w, sy));
+
+  // "Undo" hint on the right.
+  graphics_context_set_text_color(ctx, hl ? GColorBlack : theme_accent());
+  graphics_draw_text(ctx, undo, hint_font, GRect(b.size.w - 4 - uw, (b.size.h - 16) / 2, uw, 16),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+
+  // Ticked checkbox.
+  graphics_context_set_stroke_color(ctx, GColorBlack);
+  graphics_draw_round_rect(ctx, GRect(10, b.size.h / 2 - 8, 16, 16), 3);
+  graphics_draw_line(ctx, GPoint(13, b.size.h / 2), GPoint(16, b.size.h / 2 + 4));
+  graphics_draw_line(ctx, GPoint(16, b.size.h / 2 + 4), GPoint(23, b.size.h / 2 - 5));
+}
+
 static void draw_task_row(GContext *ctx, const Layer *cell, Task *t) {
   GRect b = layer_get_bounds(cell);
   bool hl = menu_cell_layer_is_highlighted(cell);
   RowMetrics m = row_metrics();
 
+  if (t->done) { draw_done_row(ctx, b, t, hl, m); return; }
+
   graphics_context_set_text_color(ctx, GColorBlack);
   if (hl) {
-    // Selected row: marquee long titles horizontally (no ellipsis).
-    graphics_draw_text(ctx, t->title, m.font, GRect(34 - s_marq_offset, m.text_y, 4000, m.text_h),
+    // Selected row: marquee the title on one line (no ellipsis), vertically
+    // centered so it sits nicely even when the row is two lines tall.
+    int y = (b.size.h - m.text_h) / 2;
+    graphics_draw_text(ctx, t->title, m.font, GRect(34 - s_marq_offset, y, 4000, m.text_h),
                        GTextOverflowModeFill, GTextAlignmentLeft, NULL);
     // Re-paint the checkbox column so scrolled text never runs under it.
     graphics_context_set_fill_color(ctx, theme_accent());
     graphics_fill_rect(ctx, GRect(0, 0, 34, b.size.h), 0, GCornerNone);
   } else {
-    graphics_draw_text(ctx, t->title, m.font, GRect(34, m.text_y, b.size.w - 40, m.text_h),
+    // Unselected row: a small gray due label at the right, and the title wrapped
+    // onto up to two lines in the remaining width (ellipsized beyond that).
+    int dw = due_width(t->due);
+    int title_w = b.size.w - 40 - (dw ? dw + DUE_GAP : 0);
+    graphics_draw_text(ctx, t->title, m.font,
+                       GRect(34, m.text_y, title_w, m.text_h + m.line_h),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    if (dw) {
+      graphics_context_set_text_color(ctx, GColorDarkGray);
+      graphics_draw_text(ctx, t->due, fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                         GRect(b.size.w - 4 - dw, (b.size.h - 16) / 2, dw, 16),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    }
   }
 
   // Empty checkbox, drawn last so it stays visible on the scrolling row.
@@ -193,7 +342,7 @@ static void draw_status_row(GContext *ctx, const Layer *cell) {
       default:           title = i18n(STR_UNCONF_T);  sub = i18n(STR_UNCONF_S);  break;
     }
   } else {
-    title = s_is_today ? i18n(STR_NOTHING_TODAY) : i18n(STR_NO_TASKS);
+    title = (s_mode == TASK_LIST_TODAY) ? i18n(STR_NOTHING_TODAY) : i18n(STR_NO_TASKS);
     sub = "";
   }
   graphics_context_set_text_color(ctx, GColorBlack);
@@ -208,7 +357,7 @@ static void draw_status_row(GContext *ctx, const Layer *cell) {
 
 static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *ci, void *c) {
   if (!list_ready()) { draw_status_row(ctx, cell); return; }
-  if (!s_is_today && ci->row == 0) { draw_add_row(ctx, cell); return; }
+  if (s_mode == TASK_LIST_PROJECT && ci->row == 0) { draw_add_row(ctx, cell); return; }
   if (data_task_count() == 0) { draw_status_row(ctx, cell); return; }
   Task *t = data_task(ci->row - add_rows());
   if (t) draw_task_row(ctx, cell, t);
@@ -223,10 +372,25 @@ static void select_click(MenuLayer *ml, MenuIndex *ci, void *ctx) {
     }
     return;
   }
-  if (!s_is_today && ci->row == 0) {
+  if (s_mode == TASK_LIST_PROJECT && ci->row == 0) {
     dictation_flow_start(add_result);
     return;
   }
+  if (data_task_count() == 0) return;
+  int trow = ci->row - add_rows();
+  Task *t = data_task(trow);
+  if (!t || !t->id[0]) return;
+  // A second Select on the pending row undoes the quick-complete.
+  if (s_pending_id[0] && strcmp(s_pending_id, t->id) == 0) { pending_undo(); return; }
+  if (config_quick_complete()) { quick_complete(trow); }   // Select ticks it off
+  else { open_task_menu(t); }                              // Select opens the menu
+}
+
+// Long-press always opens the menu (Complete / Details / Delete), so those actions
+// stay reachable whether or not quick-complete is on.
+static void select_long_click(MenuLayer *ml, MenuIndex *ci, void *ctx) {
+  if (!list_ready()) return;
+  if (s_mode == TASK_LIST_PROJECT && ci->row == 0) return;
   if (data_task_count() == 0) return;
   Task *t = data_task(ci->row - add_rows());
   if (t && t->id[0]) open_task_menu(t);
@@ -310,20 +474,14 @@ static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect b = layer_get_bounds(root);
 
-  s_status_bar = status_bar_layer_create();
-  status_bar_layer_set_colors(s_status_bar, GColorWhite, GColorBlack);
-  status_bar_layer_set_separator_mode(s_status_bar, StatusBarLayerSeparatorModeDotted);
-  layer_add_child(root, status_bar_layer_get_layer(s_status_bar));
-
-  int top = STATUS_BAR_LAYER_HEIGHT;
+  int top = HEADER_BAR_HEIGHT;
   s_menu = menu_layer_create(GRect(0, top, b.size.w, b.size.h - top));
   menu_layer_set_callbacks(s_menu, NULL, (MenuLayerCallbacks){
     .get_num_rows = get_num_rows,
     .get_cell_height = get_cell_height,
-    .get_header_height = get_header_height,
-    .draw_header = draw_header,
     .draw_row = draw_row,
     .select_click = select_click,
+    .select_long_click = select_long_click,
     .selection_changed = selection_changed,
   });
   menu_layer_set_normal_colors(s_menu, GColorWhite, GColorBlack);
@@ -331,11 +489,14 @@ static void window_load(Window *window) {
   menu_layer_set_click_config_onto_window(s_menu, window);
   layer_add_child(root, menu_layer_get_layer(s_menu));
 
-  // Thin accent line just under the status bar, shown only while refreshing.
-  s_refresh_bar = layer_create(GRect(0, top - 3, b.size.w, 3));
+  // Thin accent line just under the header bar (over the white list), while refreshing.
+  s_refresh_bar = layer_create(GRect(0, top, b.size.w, 3));
   layer_set_update_proc(s_refresh_bar, refresh_bar_update);
   layer_set_hidden(s_refresh_bar, true);
   layer_add_child(root, s_refresh_bar);
+
+  s_header = header_bar_create(b.size.w);
+  layer_add_child(root, s_header);
 }
 
 static void window_unload(Window *window) {
@@ -343,8 +504,7 @@ static void window_unload(Window *window) {
   menu_layer_destroy(s_menu);
   s_menu = NULL;
   if (s_refresh_bar) { layer_destroy(s_refresh_bar); s_refresh_bar = NULL; }
-  status_bar_layer_destroy(s_status_bar);
-  s_status_bar = NULL;
+  if (s_header) { layer_destroy(s_header); s_header = NULL; }
   window_destroy(s_window);
   s_window = NULL;
   s_shown = false;
@@ -352,20 +512,22 @@ static void window_unload(Window *window) {
 
 static void window_appear(Window *window) {
   s_shown = true;
+  header_bar_set_active(s_header, s_title, HEADER_COUNT_TASKS);   // project / Today / label name
   update_refresh_bar();
   marquee_start();
 }
 static void window_disappear(Window *window) {
   s_shown = false;
   marquee_stop();
+  pending_commit();   // finalize a quick-complete if the user navigates away mid-window
 }
 
-void task_list_push(const char *project_id, const char *title, bool is_today) {
-  strncpy(s_project_id, project_id ? project_id : "", sizeof(s_project_id) - 1);
+void task_list_push(const char *list_id, const char *title, TaskListMode mode) {
+  strncpy(s_project_id, list_id ? list_id : "", sizeof(s_project_id) - 1);
   s_project_id[sizeof(s_project_id) - 1] = '\0';
   strncpy(s_title, title ? title : "", sizeof(s_title) - 1);
   s_title[sizeof(s_title) - 1] = '\0';
-  s_is_today = is_today;
+  s_mode = mode;
 
   // Paint the Vandaag list instantly from cache (other lists still fetch cold);
   // the background fetch overwrites it when it lands.

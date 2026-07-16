@@ -4,6 +4,33 @@ All notable changes to PebbleDoist are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-16
+
+### Added
+
+- **Label filtering** — a new **Labels** row on the overview opens the list of your Todoist
+  labels; picking one shows every task carrying that label (across lists, prefixed with the
+  list name).
+- **Task detail** now shows the task's **description** and its **labels** as coloured badges,
+  in addition to the title and deadline. Both are fetched on demand when the detail opens.
+- **Branded top bar** — the list screens now have an accent-coloured header showing the app
+  icon, a context title (app name / list name / "Labels"), the number of open tasks, and the
+  time. This replaced the old narrow status bar and frees vertical space.
+- **Due dates in task rows** — each task now shows its deadline on the right of the row.
+- **Quick-complete** *(optional, off by default)* — turn it on in the phone settings to
+  complete a task with a single **Select** press (with a short **Undo** window); long-press
+  always opens the menu. When off, Select opens the menu as before.
+
+### Changed
+
+- **Complete is now the first action** in a task's menu (was second), and **Delete asks for
+  confirmation** so an accidental press can't remove a task.
+- **Completing and deleting are instant** — the task leaves the list immediately instead of
+  flashing a "loading" state while the phone syncs.
+- Task rows are **a little shorter with slightly larger text**; long titles wrap onto two
+  lines when unselected and scroll (marquee) when selected.
+- The task name moved from a separate header into the top bar, giving one more row of space.
+
 ## [1.2.0] - 2026-07-15
 
 ### Added

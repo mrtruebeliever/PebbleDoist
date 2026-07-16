@@ -64,10 +64,6 @@ void dictation_flow_deinit(void) {
   s_in_progress = false;
 }
 
-bool dictation_flow_is_available(void) {
-  return s_session != NULL;
-}
-
 void dictation_flow_start(DictationResultCallback callback) {
   if (!callback || s_in_progress) {
     return;

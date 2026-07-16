@@ -23,9 +23,6 @@ typedef void (*DictationResultCallback)(DictationResult result, const char *tran
 void dictation_flow_init(void);
 void dictation_flow_deinit(void);
 
-// True if a session could be created (mic + paired phone w/ dictation support).
-bool dictation_flow_is_available(void);
-
 // Shows the system dictation UI. `callback` fires once with the outcome.
 // No-op (silently ignored) if a session is already in progress.
 void dictation_flow_start(DictationResultCallback callback);

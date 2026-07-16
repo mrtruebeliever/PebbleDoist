@@ -7,6 +7,7 @@
 #define PERSIST_DEFAULT_PROJ_NM  3
 #define PERSIST_LANG             4
 #define PERSIST_FONT_SIZE        5
+#define PERSIST_QUICK_COMPLETE   6
 
 // Task-list text size (mirrors the Clay FONT_SIZE select).
 #define FONT_SIZE_SMALL   0
@@ -27,6 +28,9 @@ int         config_lang(void);
 // Text size of the task-list rows (FONT_SIZE_* above).
 int         config_font_size(void);
 
+// True when a plain Select on a task completes it (quick-complete). Default false.
+bool        config_quick_complete(void);
+
 // Current quick-launch settings (valid after config_load / config_inbox_received).
 int         config_start_view(void);
 const char *config_default_project_id(void);    // "" if unset; may be TODAY_PROJECT_ID
@@ -40,8 +44,9 @@ void config_set_change_callback(void (*cb)(void));
 void config_inbox_received(DictionaryIterator *iter, void *context);
 
 // Outbox helpers (watch -> phone).
-void config_request_projects(void);                 // (re)load the project list
 void config_request_tasks(const char *project_id);  // load a list; TODAY_PROJECT_ID for Vandaag
+void config_request_labels(void);                   // load the label list
+void config_request_task_detail(const char *task_id); // fetch one task's description + labels
 void config_add_task(const char *project_id, const char *content);
 void config_close_task(const char *task_id);
 void config_delete_task(const char *task_id);

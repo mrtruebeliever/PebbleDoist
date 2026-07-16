@@ -1,7 +1,7 @@
 {
   "name": "pebbledoist",
   "author": "mrtruebeliever",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "license": "MIT",
   "keywords": ["pebble-app"],
   "private": true,
@@ -27,6 +27,7 @@
       "PROJECTS_SEL",
       "LANGUAGE",
       "FONT_SIZE",
+      "QUICK_COMPLETE",
       "START_VIEW",
       "DEFAULT_PROJECT",
       "DEFAULT_PROJECT_ID",
@@ -43,15 +44,21 @@
       "TASK_TITLE",
       "TASK_DUE",
       "TASK_DONE",
-      "REQUEST_PROJECTS",
       "REQUEST_TASKS",
       "PROJECT_ID",
       "ADD_TASK",
-      "TASK_CONTENT",
       "CLOSE_TASK",
       "DELETE_TASK",
       "REFRESH",
-      "TIMELINE_ENABLED"
+      "TIMELINE_ENABLED",
+      "REQUEST_LABELS",
+      "LABEL_COUNT",
+      "LABEL_INDEX",
+      "LABEL_NAME",
+      "REQUEST_TASK_DETAIL",
+      "TASK_DETAIL_ID",
+      "TASK_DETAIL_DESC",
+      "TASK_DETAIL_LABELS"
     ],
     "resources": {
       "media": [
@@ -60,6 +67,11 @@
           "name": "IMG_MENU_ICON",
           "file": "images/menu_icon.png",
           "menuIcon": true
+        },
+        {
+          "type": "png",
+          "name": "IMG_HEADER_ICON",
+          "file": "images/header_icon.png"
         }
       ]
     }

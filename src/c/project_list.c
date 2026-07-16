@@ -1,15 +1,17 @@
 #include "project_list.h"
 #include "task_list.h"
+#include "label_list.h"
 #include "data.h"
 #include "config.h"
 #include "i18n.h"
 #include "theme.h"
+#include "header_bar.h"
 #include "dictation_flow.h"
 
-static Window         *s_window = NULL;
-static MenuLayer      *s_menu = NULL;
-static StatusBarLayer *s_status_bar = NULL;
-static Layer          *s_refresh_bar = NULL;   // thin accent line shown while refreshing
+static Window    *s_window = NULL;
+static MenuLayer *s_menu = NULL;
+static Layer     *s_header = NULL;
+static Layer     *s_refresh_bar = NULL;   // thin accent line shown while refreshing
 
 // True when the overview should show its rows: loaded, or refreshing while cached
 // projects are still present (stale-while-revalidate — avoids a loading flash).
@@ -103,12 +105,13 @@ static void open_options_menu(void) {
 
 // --- MenuLayer callbacks -----------------------------------------------------
 
-// Row layout when loaded: 0 = Vandaag, 1..N = projects, N+1 = "Nieuwe taak".
-static int add_row_index(void) { return 1 + data_project_count(); }
+// Row layout when loaded: 0 = Vandaag, 1..N = projects, N+1 = Labels, N+2 = "Nieuwe taak".
+static int labels_row_index(void) { return 1 + data_project_count(); }
+static int add_row_index(void)    { return 2 + data_project_count(); }
 
 static uint16_t get_num_rows(MenuLayer *ml, uint16_t section, void *ctx) {
   if (list_ready()) {
-    return 2 + data_project_count();  // Vandaag + projects + "Nieuwe taak"
+    return 3 + data_project_count();  // Vandaag + projects + Labels + "Nieuwe taak"
   }
   return 1;  // status row
 }
@@ -153,6 +156,10 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *ci, void *c) {
     draw_text_row(ctx, cell, i18n(STR_TODAY), i18n(STR_TODAY_SUB));
     return;
   }
+  if (ci->row == labels_row_index()) {
+    draw_text_row(ctx, cell, i18n(STR_LABELS), i18n(STR_LABELS_SUB));
+    return;
+  }
   if (ci->row == add_row_index()) {
     draw_text_row(ctx, cell, i18n(STR_NEW_TASK), i18n(STR_DICTATE));
     return;
@@ -174,7 +181,11 @@ static void select_click(MenuLayer *ml, MenuIndex *ci, void *ctx) {
     return;
   }
   if (ci->row == 0) {
-    task_list_push(TODAY_PROJECT_ID, i18n(STR_TODAY), true);
+    task_list_push(TODAY_PROJECT_ID, i18n(STR_TODAY), TASK_LIST_TODAY);
+    return;
+  }
+  if (ci->row == labels_row_index()) {
+    label_list_push();
     return;
   }
   if (ci->row == add_row_index()) {
@@ -183,7 +194,7 @@ static void select_click(MenuLayer *ml, MenuIndex *ci, void *ctx) {
   }
   Project *p = data_project(ci->row - 1);
   if (p && p->id[0]) {
-    task_list_push(p->id, p->name, false);
+    task_list_push(p->id, p->name, TASK_LIST_PROJECT);
   }
 }
 
@@ -211,12 +222,7 @@ static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect b = layer_get_bounds(root);
 
-  s_status_bar = status_bar_layer_create();
-  status_bar_layer_set_colors(s_status_bar, GColorWhite, GColorBlack);
-  status_bar_layer_set_separator_mode(s_status_bar, StatusBarLayerSeparatorModeDotted);
-  layer_add_child(root, status_bar_layer_get_layer(s_status_bar));
-
-  int top = STATUS_BAR_LAYER_HEIGHT;
+  int top = HEADER_BAR_HEIGHT;
   s_menu = menu_layer_create(GRect(0, top, b.size.w, b.size.h - top));
   menu_layer_set_callbacks(s_menu, NULL, (MenuLayerCallbacks){
     .get_num_rows = get_num_rows,
@@ -230,19 +236,26 @@ static void window_load(Window *window) {
   menu_layer_set_click_config_onto_window(s_menu, window);
   layer_add_child(root, menu_layer_get_layer(s_menu));
 
-  // Thin accent line just under the status bar, shown only while refreshing.
-  s_refresh_bar = layer_create(GRect(0, top - 3, b.size.w, 3));
+  // Thin accent line just under the header bar (over the white list), while refreshing.
+  s_refresh_bar = layer_create(GRect(0, top, b.size.w, 3));
   layer_set_update_proc(s_refresh_bar, refresh_bar_update);
   layer_set_hidden(s_refresh_bar, true);
   layer_add_child(root, s_refresh_bar);
+
+  // Branded accent top bar (icon + name + open-task count + time).
+  s_header = header_bar_create(b.size.w);
+  layer_add_child(root, s_header);
 }
 
 static void window_unload(Window *window) {
   menu_layer_destroy(s_menu);
   s_menu = NULL;
   if (s_refresh_bar) { layer_destroy(s_refresh_bar); s_refresh_bar = NULL; }
-  status_bar_layer_destroy(s_status_bar);
-  s_status_bar = NULL;
+  if (s_header) { layer_destroy(s_header); s_header = NULL; }
+}
+
+static void window_appear(Window *window) {
+  header_bar_set_active(s_header, "PebbleDoist", HEADER_COUNT_PROJECTS_TOTAL);
 }
 
 Window *project_list_window(void) {
@@ -252,6 +265,7 @@ Window *project_list_window(void) {
     window_set_window_handlers(s_window, (WindowHandlers){
       .load = window_load,
       .unload = window_unload,
+      .appear = window_appear,
     });
   }
   return s_window;

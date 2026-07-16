@@ -7,6 +7,7 @@ static void (*s_change_cb)(void) = NULL;
 
 static int  s_lang = LANG_EN;
 static int  s_font_size = FONT_SIZE_MEDIUM;
+static bool s_quick_complete = false;
 static int  s_start_view = START_VIEW_OVERVIEW;
 static char s_default_proj_id[PROJ_ID_LEN]   = "";
 static char s_default_proj_name[PROJ_NAME_LEN] = "";
@@ -44,6 +45,7 @@ static int resolve_font_size(int stored) {
 
 int         config_lang(void)                { return s_lang; }
 int         config_font_size(void)           { return s_font_size; }
+bool        config_quick_complete(void)      { return s_quick_complete; }
 int         config_start_view(void)          { return s_start_view; }
 const char *config_default_project_id(void)  { return s_default_proj_id; }
 const char *config_default_project_name(void){ return s_default_proj_name; }
@@ -56,6 +58,9 @@ void config_load(void) {
   s_lang = resolve_lang(stored);
   if (persist_exists(PERSIST_FONT_SIZE)) {
     s_font_size = resolve_font_size(persist_read_int(PERSIST_FONT_SIZE));
+  }
+  if (persist_exists(PERSIST_QUICK_COMPLETE)) {
+    s_quick_complete = persist_read_int(PERSIST_QUICK_COMPLETE) != 0;
   }
   if (persist_exists(PERSIST_START_VIEW)) {
     s_start_view = persist_read_int(PERSIST_START_VIEW);
@@ -123,6 +128,36 @@ static void apply_task(DictionaryIterator *iter) {
   tk->done = (t = dict_find(iter, MESSAGE_KEY_TASK_DONE)) ? (t->value->int32 != 0) : false;
 }
 
+// Copies one label's name out of a per-label AppMessage.
+static void apply_label(DictionaryIterator *iter) {
+  Tuple *t_idx = dict_find(iter, MESSAGE_KEY_LABEL_INDEX);
+  if (!t_idx) return;
+  int idx = t_idx->value->int32;
+  Label *l = data_label(idx);
+  if (!l) return;
+
+  if (idx >= data_label_count()) {
+    data_set_label_count(idx + 1);  // reveal rows progressively
+  }
+
+  Tuple *t;
+  if ((t = dict_find(iter, MESSAGE_KEY_LABEL_NAME))) {
+    strncpy(l->name, t->value->cstring, LABEL_NAME_LEN - 1);
+    l->name[LABEL_NAME_LEN - 1] = '\0';
+  }
+}
+
+// Applies an on-demand task-detail reply (description + labels) from the phone.
+static void apply_task_detail(DictionaryIterator *iter) {
+  Tuple *t_desc = dict_find(iter, MESSAGE_KEY_TASK_DETAIL_DESC);
+  if (!t_desc) return;  // only the detail reply carries this key
+  Tuple *t_id = dict_find(iter, MESSAGE_KEY_TASK_DETAIL_ID);
+  Tuple *t_lbl = dict_find(iter, MESSAGE_KEY_TASK_DETAIL_LABELS);
+  data_set_task_detail(t_id ? t_id->value->cstring : "",
+                       t_desc->value->cstring,
+                       t_lbl ? t_lbl->value->cstring : "");
+}
+
 void config_inbox_received(DictionaryIterator *iter, void *context) {
   Tuple *t;
 
@@ -135,6 +170,11 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
   if ((t = dict_find(iter, MESSAGE_KEY_FONT_SIZE))) {
     s_font_size = resolve_font_size(t->value->int32);
     persist_write_int(PERSIST_FONT_SIZE, s_font_size);
+  }
+
+  if ((t = dict_find(iter, MESSAGE_KEY_QUICK_COMPLETE))) {
+    s_quick_complete = t->value->int32 != 0;
+    persist_write_int(PERSIST_QUICK_COMPLETE, s_quick_complete ? 1 : 0);
   }
 
   // Persisted quick-launch settings from Clay.
@@ -170,10 +210,16 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     data_clear_tasks();
     s_task_total = t->value->int32;
   }
+  // Label list head — reset; items follow. Labels are a transient view (not cached).
+  if ((t = dict_find(iter, MESSAGE_KEY_LABEL_COUNT))) {
+    data_clear_labels();
+  }
 
   // Per-record streams (one message at a time).
   apply_project(iter);
   apply_task(iter);
+  apply_label(iter);
+  apply_task_detail(iter);
 
   // Once every announced record has arrived, snapshot the list to the cache so
   // the next visit paints instantly. Runs once per stream (total reset to -1).
@@ -194,14 +240,6 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
 
 // --- Outbox helpers ----------------------------------------------------------
 
-void config_request_projects(void) {
-  DictionaryIterator *out;
-  if (app_message_outbox_begin(&out) != APP_MSG_OK) return;
-  int one = 1;
-  dict_write_int(out, MESSAGE_KEY_REQUEST_PROJECTS, &one, sizeof(int), true);
-  app_message_outbox_send();
-}
-
 void config_request_tasks(const char *project_id) {
   // Remember which list this stream belongs to so its completion can be cached.
   strncpy(s_req_task_list, project_id ? project_id : "", sizeof(s_req_task_list) - 1);
@@ -215,11 +253,25 @@ void config_request_tasks(const char *project_id) {
   app_message_outbox_send();
 }
 
+void config_request_labels(void) {
+  DictionaryIterator *out;
+  if (app_message_outbox_begin(&out) != APP_MSG_OK) return;
+  int one = 1;
+  dict_write_int(out, MESSAGE_KEY_REQUEST_LABELS, &one, sizeof(int), true);
+  app_message_outbox_send();
+}
+
+void config_request_task_detail(const char *task_id) {
+  DictionaryIterator *out;
+  if (app_message_outbox_begin(&out) != APP_MSG_OK) return;
+  dict_write_cstring(out, MESSAGE_KEY_REQUEST_TASK_DETAIL, task_id ? task_id : "");
+  app_message_outbox_send();
+}
+
 void config_add_task(const char *project_id, const char *content) {
   DictionaryIterator *out;
   if (app_message_outbox_begin(&out) != APP_MSG_OK) return;
   dict_write_cstring(out, MESSAGE_KEY_ADD_TASK, content ? content : "");
-  dict_write_cstring(out, MESSAGE_KEY_TASK_CONTENT, content ? content : "");
   dict_write_cstring(out, MESSAGE_KEY_PROJECT_ID, project_id ? project_id : "");
   app_message_outbox_send();
 }

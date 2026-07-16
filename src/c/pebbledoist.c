@@ -6,6 +6,9 @@
 #include "dictation_flow.h"
 #include "project_list.h"
 #include "task_list.h"
+#include "label_list.h"
+#include "task_detail.h"
+#include "header_bar.h"
 
 // Fired by config_inbox_received whenever incoming data changes: redraw
 // whichever window is currently visible.
@@ -14,6 +17,13 @@ static void on_data_changed(void) {
   if (task_list_is_shown()) {
     task_list_reload();
   }
+  if (label_list_is_shown()) {
+    label_list_reload();
+  }
+  if (task_detail_is_shown()) {
+    task_detail_reload();
+  }
+  header_bar_refresh();   // open-task count may have changed
 }
 
 static void inbox_dropped(AppMessageResult reason, void *context) {
@@ -38,7 +48,8 @@ static void apply_quick_launch(void *data) {
       const char *id = config_default_project_id();
       if (id[0]) {
         bool today = (strcmp(id, TODAY_PROJECT_ID) == 0);
-        task_list_push(id, today ? i18n(STR_TODAY) : config_default_project_name(), today);
+        task_list_push(id, today ? i18n(STR_TODAY) : config_default_project_name(),
+                       today ? TASK_LIST_TODAY : TASK_LIST_PROJECT);
       }
       break;
     }
@@ -50,6 +61,7 @@ static void apply_quick_launch(void *data) {
 
 static void init(void) {
   dictation_flow_init();
+  header_bar_init();
   config_load();
   // Paint the overview instantly from the cached project list; the phone's
   // "ready" handler re-fetches in the background and overwrites it. Falls back
@@ -72,8 +84,10 @@ static void init(void) {
 }
 
 static void deinit(void) {
+  label_list_destroy();
   task_list_destroy();
   project_list_destroy();
+  header_bar_deinit();
   dictation_flow_deinit();
 }
 

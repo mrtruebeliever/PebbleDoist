@@ -49,6 +49,9 @@ function getFontSize() {
   return (v >= 0 && v <= 2) ? v : 1;
 }
 
+// Quick-complete: Select on a task completes it. Default off.
+function getQuickComplete() { return localStorage.getItem('QUICK_COMPLETE') === '1'; }
+
 function getStartView() { return parseInt(localStorage.getItem('START_VIEW') || '0', 10) || 0; }
 function getDefId() { return localStorage.getItem('DEF_ID') || ''; }
 function getDefName() { return localStorage.getItem('DEF_NAME') || ''; }
@@ -166,6 +169,28 @@ function streamTasks(tasks) {
   }, function () { console.log('task head send failed'); });
 }
 
+var MAX_LABELS = 32;
+
+// Streams the label list one message at a time, advancing on each ACK.
+function streamLabels(names) {
+  var count = Math.min(names.length, MAX_LABELS);
+  var head = {};
+  head[keys.LABEL_COUNT] = count;
+  head[keys.LOAD_STATE] = LOAD_OK;
+  Pebble.sendAppMessage(head, function () {
+    var i = 0;
+    function next() {
+      if (i >= count) return;
+      var msg = {};
+      msg[keys.LABEL_INDEX] = i;
+      msg[keys.LABEL_NAME] = String(names[i]).substring(0, 31);
+      Pebble.sendAppMessage(msg, function () { i++; next(); },
+        function () { console.log('label ' + i + ' send failed'); i++; next(); });
+    }
+    next();
+  }, function () { console.log('label head send failed'); });
+}
+
 // --- Loads -------------------------------------------------------------------
 
 // Fetches a task count for each selected project, then streams the project list.
@@ -241,6 +266,21 @@ function mapTasks(raw, prefixProject) {
   });
 }
 
+var LABEL_PREFIX = 'label:';
+
+// Fetches the tasks carrying a given label, tolerant of either v1 filter form.
+// Note: Todoist's `@name` filter matches single-token label names; a label name
+// with spaces may not match (consistent with the app's pragmatic scope).
+function getLabelTasks(name, cb) {
+  var q = encodeURIComponent('@' + name);
+  request('GET', '/tasks/filter?query=' + q + '&limit=200', null, function (ok, status, data) {
+    if (ok) { cb(asList(data)); return; }
+    request('GET', '/tasks?filter=' + q + '&limit=200', null, function (ok2, s2, d2) {
+      cb(ok2 ? asList(d2) : null);
+    });
+  });
+}
+
 function loadTasks(projectId) {
   var token = getToken();
   if (!token) { sendLoad(LOAD_UNCONFIGURED); return; }
@@ -248,16 +288,49 @@ function loadTasks(projectId) {
   sendLoad(LOAD_LOADING);
 
   var isToday = (projectId === TODAY_ID);
+  var isLabel = projectId.indexOf(LABEL_PREFIX) === 0;
+  var mixed = isToday || isLabel;   // prefix rows with the project name (cross-project view)
   function done(raw) {
     if (raw === null) { sendLoad(LOAD_ERROR); return; }
-    if (!isToday) { taskCache[projectId] = raw; }
-    streamTasks(mapTasks(raw, isToday));
+    if (!mixed) { taskCache[projectId] = raw; }
+    streamTasks(mapTasks(raw, mixed));
   }
   if (isToday) {
     getTodayTasks(done);
+  } else if (isLabel) {
+    getLabelTasks(projectId.slice(LABEL_PREFIX.length), done);
   } else {
     apiGetList('/tasks?project_id=' + encodeURIComponent(projectId) + '&limit=200', done);
   }
+}
+
+// Fetches the user's labels and streams their names to the watch.
+function loadLabels() {
+  var token = getToken();
+  if (!token) { sendLoad(LOAD_UNCONFIGURED); return; }
+  sendLoad(LOAD_LOADING);
+  apiGetList('/labels?limit=200', function (labels) {
+    if (labels === null) { sendLoad(LOAD_ERROR); return; }
+    streamLabels(labels.map(function (l) { return l.name; }));
+  });
+}
+
+// Fetches one task's description + labels on demand for the detail view. Always
+// replies (empty on failure) so the watch stops waiting.
+function sendTaskDetail(taskId) {
+  if (!taskId) { return; }
+  request('GET', '/tasks/' + encodeURIComponent(taskId), null, function (ok, status, data) {
+    var msg = {};
+    msg[keys.TASK_DETAIL_ID] = String(taskId);
+    if (ok && data) {
+      msg[keys.TASK_DETAIL_DESC] = String(data.description || '').substring(0, 500);
+      msg[keys.TASK_DETAIL_LABELS] = (data.labels || []).join(',').substring(0, 150);
+    } else {
+      msg[keys.TASK_DETAIL_DESC] = '';
+      msg[keys.TASK_DETAIL_LABELS] = '';
+    }
+    Pebble.sendAppMessage(msg);
+  });
 }
 
 // Splits a leading or trailing Dutch date phrase off the spoken text so it can be
@@ -505,14 +578,16 @@ Pebble.addEventListener('ready', function () {
 
 Pebble.addEventListener('appmessage', function (e) {
   var d = (e && e.payload) || {};
-  if (d.REQUEST_PROJECTS !== undefined) {
-    loadProjects();
-  } else if (d.REFRESH !== undefined) {
+  if (d.REFRESH !== undefined) {
     loadProjects();
   } else if (d.REQUEST_TASKS !== undefined) {
     loadTasks(String(d.PROJECT_ID || ''));
+  } else if (d.REQUEST_LABELS !== undefined) {
+    loadLabels();
+  } else if (d.REQUEST_TASK_DETAIL !== undefined) {
+    sendTaskDetail(String(d.REQUEST_TASK_DETAIL));
   } else if (d.ADD_TASK !== undefined) {
-    addTask(String(d.PROJECT_ID || ''), String(d.TASK_CONTENT || d.ADD_TASK || ''));
+    addTask(String(d.PROJECT_ID || ''), String(d.ADD_TASK || ''));
   } else if (d.CLOSE_TASK !== undefined) {
     closeTask(String(d.CLOSE_TASK));
   } else if (d.DELETE_TASK !== undefined) {
@@ -550,6 +625,7 @@ function settingsSnapshot() {
     sel: getSel(),
     langRaw: getLangRaw(),
     fontSize: getFontSize(),
+    quickComplete: getQuickComplete(),
     startView: getStartView(),
     defId: getDefId(),
     tlEnabled: getTimelineEnabled()
@@ -583,6 +659,7 @@ Pebble.addEventListener('webviewclosed', function (e) {
   if (isNaN(lang)) { lang = 255; }  // 255 = Automatic (follow watch locale)
   var fontSize = parseInt(pick('FONT_SIZE'), 10);
   if (!(fontSize >= 0 && fontSize <= 2)) { fontSize = 1; }
+  var quickComplete = !!pick('QUICK_COMPLETE');
   var startView = parseInt(pick('START_VIEW'), 10) || 0;
   var defId = (pick('DEFAULT_PROJECT') || '').toString();
   var defName = (defId === TODAY_ID) ? '' : nameForId(defId, all);
@@ -599,6 +676,7 @@ Pebble.addEventListener('webviewclosed', function (e) {
   localStorage.setItem('SEL', JSON.stringify(sel));
   localStorage.setItem('LANG', String(lang));
   localStorage.setItem('FONT_SIZE', String(fontSize));
+  localStorage.setItem('QUICK_COMPLETE', quickComplete ? '1' : '0');
   localStorage.setItem('START_VIEW', String(startView));
   localStorage.setItem('DEF_ID', defId);
   localStorage.setItem('DEF_NAME', defName);
@@ -609,6 +687,7 @@ Pebble.addEventListener('webviewclosed', function (e) {
   var msg = {};
   msg[keys.LANGUAGE] = lang;
   msg[keys.FONT_SIZE] = fontSize;
+  msg[keys.QUICK_COMPLETE] = quickComplete ? 1 : 0;
   msg[keys.START_VIEW] = startView;
   msg[keys.DEFAULT_PROJECT_ID] = defId;
   msg[keys.DEFAULT_PROJECT_NAME] = defName;

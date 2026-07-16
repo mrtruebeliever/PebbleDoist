@@ -8,6 +8,7 @@ var L = {
     token_label: 'API token', language: 'Language', automatic: 'Automatic (watch language)',
     font_label: 'Text size', font_desc: 'Size of the task titles in a task list.',
     font_small: 'Small', font_medium: 'Medium', font_large: 'Large',
+    qc_label: 'Quick-complete', qc_desc: 'Press Select on a task to complete it right away (long-press opens the menu). Off: Select opens the menu.',
     projects_heading: 'Projects on the watch', projects_desc: 'Choose which lists appear on the watch.', projects_label: 'Projects',
     ql_heading: 'On Quick Launch', ql_desc: 'What the app shows when opened via Quick Launch (a normal launch always shows the overview).',
     start_label: 'Start screen', start_overview: 'Project overview', start_dictate: 'Dictate right away', start_project: 'Tasks of default project',
@@ -21,6 +22,7 @@ var L = {
     token_label: 'API-token', language: 'Taal', automatic: 'Automatisch (horlogetaal)',
     font_label: 'Tekstgrootte', font_desc: 'Grootte van de taaktitels in een takenlijst.',
     font_small: 'Klein', font_medium: 'Normaal', font_large: 'Groot',
+    qc_label: 'Snel afvinken', qc_desc: 'Druk op Select bij een taak om ze meteen af te vinken (lang indrukken opent het menu). Uit: Select opent het menu.',
     projects_heading: 'Projecten op het horloge', projects_desc: 'Kies welke lijsten op de watch verschijnen.', projects_label: 'Projecten',
     ql_heading: 'Bij Quick Launch', ql_desc: 'Wat de app toont als je ze via Quick Launch opent (een gewone start toont altijd het overzicht).',
     start_label: 'Startscherm', start_overview: 'Projectoverzicht', start_dictate: 'Direct inspreken', start_project: 'Taken van standaardproject',
@@ -34,6 +36,7 @@ var L = {
     token_label: 'Jeton API', language: 'Langue', automatic: 'Automatique (langue de la montre)',
     font_label: 'Taille du texte', font_desc: 'Taille des titres de tâches dans une liste.',
     font_small: 'Petit', font_medium: 'Moyen', font_large: 'Grand',
+    qc_label: 'Complétion rapide', qc_desc: 'Appuyez sur Sélection sur une tâche pour la terminer aussitôt (appui long ouvre le menu). Désactivé : Sélection ouvre le menu.',
     projects_heading: 'Projets sur la montre', projects_desc: 'Choisissez les listes à afficher sur la montre.', projects_label: 'Projets',
     ql_heading: 'Au lancement rapide', ql_desc: 'Ce que l\'app affiche quand elle est ouverte via Quick Launch (un lancement normal affiche toujours l\'aperçu).',
     start_label: 'Écran de démarrage', start_overview: 'Aperçu des projets', start_dictate: 'Dicter directement', start_project: 'Tâches du projet par défaut',
@@ -47,6 +50,7 @@ var L = {
     token_label: 'API-Token', language: 'Sprache', automatic: 'Automatisch (Uhrsprache)',
     font_label: 'Textgröße', font_desc: 'Größe der Aufgabentitel in einer Aufgabenliste.',
     font_small: 'Klein', font_medium: 'Mittel', font_large: 'Groß',
+    qc_label: 'Schnell-Erledigen', qc_desc: 'Auf einer Aufgabe Select drücken, um sie sofort zu erledigen (langer Druck öffnet das Menü). Aus: Select öffnet das Menü.',
     projects_heading: 'Projekte auf der Uhr', projects_desc: 'Wähle, welche Listen auf der Uhr erscheinen.', projects_label: 'Projekte',
     ql_heading: 'Bei Quick Launch', ql_desc: 'Was die App beim Öffnen über Quick Launch zeigt (ein normaler Start zeigt immer die Übersicht).',
     start_label: 'Startbildschirm', start_overview: 'Projektübersicht', start_dictate: 'Sofort diktieren', start_project: 'Aufgaben des Standardprojekts',
@@ -60,6 +64,7 @@ var L = {
     token_label: 'Token de API', language: 'Idioma', automatic: 'Automático (idioma del reloj)',
     font_label: 'Tamaño del texto', font_desc: 'Tamaño de los títulos de tareas en una lista.',
     font_small: 'Pequeño', font_medium: 'Mediano', font_large: 'Grande',
+    qc_label: 'Completar rápido', qc_desc: 'Pulsa Select en una tarea para completarla al instante (mantén pulsado para el menú). Desactivado: Select abre el menú.',
     projects_heading: 'Proyectos en el reloj', projects_desc: 'Elige qué listas aparecen en el reloj.', projects_label: 'Proyectos',
     ql_heading: 'Con Quick Launch', ql_desc: 'Lo que muestra la app al abrirla con Quick Launch (un inicio normal siempre muestra el resumen).',
     start_label: 'Pantalla de inicio', start_overview: 'Resumen de proyectos', start_dictate: 'Dictar directamente', start_project: 'Tareas del proyecto predeterminado',
@@ -106,7 +111,10 @@ function buildConfig(langIdx, allProjects, snap) {
           { label: s.font_small, value: '0' },
           { label: s.font_medium, value: '1' },
           { label: s.font_large, value: '2' }
-        ] }
+        ] },
+      { type: 'text', defaultValue: s.qc_desc },
+      { type: 'toggle', messageKey: 'QUICK_COMPLETE', label: s.qc_label,
+        defaultValue: !!snap.quickComplete }
     ] }
   ];
 
