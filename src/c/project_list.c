@@ -60,6 +60,9 @@ static void open_add_picker(const char *content) {
   }
   ActionMenuConfig cfg = {
     .root_level = s_pick_root,
+  // .background colours the rail down the left edge, .foreground only the
+  // small crumb dot on it -- verified on the emulator. The sheet is always
+  // black with white focused / grey unfocused text, not configurable here.
     .colors = { .background = theme_accent(), .foreground = GColorBlack },
     .align = ActionMenuAlignCenter,
     .did_close = pick_did_close,
@@ -95,6 +98,9 @@ static void open_options_menu(void) {
   action_menu_level_add_action(root, i18n(STR_REFRESH), refresh_performed, NULL);
   ActionMenuConfig cfg = {
     .root_level = root,
+  // .background colours the rail down the left edge, .foreground only the
+  // small crumb dot on it -- verified on the emulator. The sheet is always
+  // black with white focused / grey unfocused text, not configurable here.
     .colors = { .background = theme_accent(), .foreground = GColorBlack },
     .align = ActionMenuAlignCenter,
     .did_close = options_did_close,
@@ -173,7 +179,9 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *ci, void *c) {
 
 static void select_click(MenuLayer *ml, MenuIndex *ci, void *ctx) {
   if (!list_ready()) {
-    if (data_load_state() == LOAD_ERROR) {
+    // Retry from the loading row too: if the phone swallowed the first
+    // request, pressing the only row on screen should re-issue it.
+    if (data_load_state() == LOAD_ERROR || data_load_state() == LOAD_LOADING) {
       data_set_load_state(LOAD_LOADING);
       config_request_refresh();
       project_list_reload();

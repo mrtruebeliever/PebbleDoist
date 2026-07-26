@@ -67,6 +67,7 @@ static void init(void) {
   // "ready" handler re-fetches in the background and overwrites it. Falls back
   // to the loading spinner only on a first run with no cache yet.
   data_set_load_state(cache_load_projects() ? LOAD_OK : LOAD_LOADING);
+  data_set_stall_callback(on_data_changed);
   config_set_change_callback(on_data_changed);
 
   app_message_register_inbox_received(config_inbox_received);

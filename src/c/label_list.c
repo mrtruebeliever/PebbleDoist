@@ -66,7 +66,9 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *ci, void *c) {
 
 static void select_click(MenuLayer *ml, MenuIndex *ci, void *ctx) {
   if (!list_ready()) {
-    if (data_load_state() == LOAD_ERROR) {
+    // Retry from the loading row too: if the phone swallowed the first
+    // request, pressing the only row on screen should re-issue it.
+    if (data_load_state() == LOAD_ERROR || data_load_state() == LOAD_LOADING) {
       data_set_load_state(LOAD_LOADING);
       config_request_labels();
       label_list_reload();

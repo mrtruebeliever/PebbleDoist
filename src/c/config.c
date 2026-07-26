@@ -5,6 +5,23 @@
 
 static void (*s_change_cb)(void) = NULL;
 
+// Decode an integer tuple by its actual type and width. The real phone app
+// packs integers at their smallest width (a 1 arrives as a 1-byte tuple), so
+// reading value->int32 blindly picks up neighbouring dict bytes; the emulator
+// always sends 4 bytes and never shows the bug. Clay may also send strings.
+static int32_t tuple_int(const Tuple *t) {
+  switch (t->type) {
+    case TUPLE_CSTRING: return (int32_t)atoi(t->value->cstring);
+    case TUPLE_INT:  if (t->length == 1) return t->value->int8;
+                     if (t->length == 2) return t->value->int16;
+                     return t->value->int32;
+    case TUPLE_UINT: if (t->length == 1) return t->value->uint8;
+                     if (t->length == 2) return t->value->uint16;
+                     return (int32_t)t->value->uint32;
+    default: return 0;
+  }
+}
+
 static int  s_lang = LANG_EN;
 static int  s_font_size = FONT_SIZE_MEDIUM;
 static bool s_quick_complete = false;
@@ -80,7 +97,7 @@ void config_load(void) {
 static void apply_project(DictionaryIterator *iter) {
   Tuple *t_idx = dict_find(iter, MESSAGE_KEY_PROJ_INDEX);
   if (!t_idx) return;
-  int idx = t_idx->value->int32;
+  int idx = tuple_int(t_idx);
   Project *p = data_project(idx);
   if (!p) return;
 
@@ -97,14 +114,14 @@ static void apply_project(DictionaryIterator *iter) {
     strncpy(p->name, t->value->cstring, PROJ_NAME_LEN - 1);
     p->name[PROJ_NAME_LEN - 1] = '\0';
   }
-  p->task_count = (t = dict_find(iter, MESSAGE_KEY_PROJ_TASKCOUNT)) ? t->value->int32 : 0;
+  p->task_count = (t = dict_find(iter, MESSAGE_KEY_PROJ_TASKCOUNT)) ? tuple_int(t) : 0;
 }
 
 // Copies one task's fields out of a per-task AppMessage.
 static void apply_task(DictionaryIterator *iter) {
   Tuple *t_idx = dict_find(iter, MESSAGE_KEY_TASK_INDEX);
   if (!t_idx) return;
-  int idx = t_idx->value->int32;
+  int idx = tuple_int(t_idx);
   Task *tk = data_task(idx);
   if (!tk) return;
 
@@ -125,14 +142,14 @@ static void apply_task(DictionaryIterator *iter) {
     strncpy(tk->due, t->value->cstring, TASK_DUE_LEN - 1);
     tk->due[TASK_DUE_LEN - 1] = '\0';
   }
-  tk->done = (t = dict_find(iter, MESSAGE_KEY_TASK_DONE)) ? (t->value->int32 != 0) : false;
+  tk->done = (t = dict_find(iter, MESSAGE_KEY_TASK_DONE)) ? (tuple_int(t) != 0) : false;
 }
 
 // Copies one label's name out of a per-label AppMessage.
 static void apply_label(DictionaryIterator *iter) {
   Tuple *t_idx = dict_find(iter, MESSAGE_KEY_LABEL_INDEX);
   if (!t_idx) return;
-  int idx = t_idx->value->int32;
+  int idx = tuple_int(t_idx);
   Label *l = data_label(idx);
   if (!l) return;
 
@@ -162,24 +179,24 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
   Tuple *t;
 
   if ((t = dict_find(iter, MESSAGE_KEY_LANGUAGE))) {
-    int v = t->value->int32;                 // may be LANG_AUTO
+    int v = tuple_int(t);                 // may be LANG_AUTO
     persist_write_int(PERSIST_LANG, v);
     s_lang = resolve_lang(v);
   }
 
   if ((t = dict_find(iter, MESSAGE_KEY_FONT_SIZE))) {
-    s_font_size = resolve_font_size(t->value->int32);
+    s_font_size = resolve_font_size(tuple_int(t));
     persist_write_int(PERSIST_FONT_SIZE, s_font_size);
   }
 
   if ((t = dict_find(iter, MESSAGE_KEY_QUICK_COMPLETE))) {
-    s_quick_complete = t->value->int32 != 0;
+    s_quick_complete = tuple_int(t) != 0;
     persist_write_int(PERSIST_QUICK_COMPLETE, s_quick_complete ? 1 : 0);
   }
 
   // Persisted quick-launch settings from Clay.
   if ((t = dict_find(iter, MESSAGE_KEY_START_VIEW))) {
-    s_start_view = t->value->int32;
+    s_start_view = tuple_int(t);
     if (s_start_view < 0 || s_start_view > START_VIEW_PROJECT) {
       s_start_view = START_VIEW_OVERVIEW;
     }
@@ -197,18 +214,18 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
   }
 
   if ((t = dict_find(iter, MESSAGE_KEY_LOAD_STATE))) {
-    data_set_load_state(t->value->int32);
+    data_set_load_state(tuple_int(t));
   }
 
   // Head messages reset the relevant list; items arrive in following messages.
   // The announced total lets us persist the list's cache once it is complete.
   if ((t = dict_find(iter, MESSAGE_KEY_PROJ_COUNT))) {
     data_clear_projects();
-    s_proj_total = t->value->int32;
+    s_proj_total = tuple_int(t);
   }
   if ((t = dict_find(iter, MESSAGE_KEY_TASK_COUNT))) {
     data_clear_tasks();
-    s_task_total = t->value->int32;
+    s_task_total = tuple_int(t);
   }
   // Label list head — reset; items follow. Labels are a transient view (not cached).
   if ((t = dict_find(iter, MESSAGE_KEY_LABEL_COUNT))) {

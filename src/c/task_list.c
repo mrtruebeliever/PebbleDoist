@@ -169,6 +169,9 @@ static void open_task_menu(Task *t) {
   action_menu_level_add_child(root, confirm, i18n(STR_DELETE));
   ActionMenuConfig cfg = {
     .root_level = root,
+  // .background colours the rail down the left edge, .foreground only the
+  // small crumb dot on it -- verified on the emulator. The sheet is always
+  // black with white focused / grey unfocused text, not configurable here.
     .colors = { .background = theme_accent(), .foreground = GColorBlack },
     .align = ActionMenuAlignCenter,
     .did_close = close_menu_did_close,
@@ -194,8 +197,10 @@ static uint16_t get_num_rows(MenuLayer *ml, uint16_t section, void *ctx) {
   if (!list_ready()) return 1;                     // status row
   int tc = data_task_count();
   if (tc > 0) return add_rows() + tc;
-  // Empty: a project shows only its add row; Today/Label show an empty-state row.
-  return add_rows() + (s_mode == TASK_LIST_PROJECT ? 0 : 1);
+  // Empty: every mode gets an empty-state row. A project used to show only its
+  // add row, which left no way to tell an empty project from one that failed to
+  // load.
+  return add_rows() + 1;
 }
 
 // Only task rows follow the text-size setting; the add and status rows keep the
@@ -329,7 +334,9 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *ci, void *c) {
 
 static void select_click(MenuLayer *ml, MenuIndex *ci, void *ctx) {
   if (!list_ready()) {
-    if (data_load_state() == LOAD_ERROR) {
+    // Retry from the loading row too: if the phone swallowed the first
+    // request, pressing the only row on screen should re-issue it.
+    if (data_load_state() == LOAD_ERROR || data_load_state() == LOAD_LOADING) {
       data_set_load_state(LOAD_LOADING);
       config_request_tasks(s_project_id);
       task_list_reload();

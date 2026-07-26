@@ -208,8 +208,22 @@ void task_detail_push(const Task *t) {
 
 void task_detail_reload(void) {
   if (!s_shown || !s_window) { return; }
+  // build() creates a fresh ScrollLayer, which starts at the top. This fires on
+  // every inbound AppMessage, and the phone streams updates continuously -- so
+  // without carrying the offset across, a background refresh yanked the user
+  // back to the start of the description they were reading.
+  GPoint offset = s_scroll ? scroll_layer_get_content_offset(s_scroll) : GPointZero;
   clear_layers();
   build(s_window);
+  if (s_scroll) {
+    GSize content = scroll_layer_get_content_size(s_scroll);
+    GRect frame = layer_get_frame(scroll_layer_get_layer(s_scroll));
+    int16_t min_y = frame.size.h - content.h;      // most-negative valid offset
+    if (min_y > 0) { min_y = 0; }
+    if (offset.y < min_y) { offset.y = min_y; }    // content may have shrunk
+    if (offset.y > 0) { offset.y = 0; }
+    scroll_layer_set_content_offset(s_scroll, offset, false);
+  }
   layer_mark_dirty(window_get_root_layer(s_window));
 }
 

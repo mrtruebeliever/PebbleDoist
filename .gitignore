@@ -16,3 +16,6 @@ node_modules/
 *.swp
 __pycache__/
 *.pyc
+
+# Local agent working notes, not part of the project
+.claude/

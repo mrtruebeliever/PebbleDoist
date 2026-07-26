@@ -52,7 +52,9 @@ static void header_update(Layer *layer, GContext *ctx) {
   // Time (right-aligned).
   char time_buf[16];
   clock_copy_time_string(time_buf, sizeof(time_buf));
-  const int TIME_W = 56;
+  // 56 fits "23:59"; a 12-hour locale renders "11:59 PM" and was being
+  // ellipsised down to the hour.
+  const int TIME_W = clock_is_24h_style() ? 56 : 78;
   int time_left = b.size.w - 4 - TIME_W;
   graphics_draw_text(ctx, time_buf, f18, GRect(time_left, 4, TIME_W, 20),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);

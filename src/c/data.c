@@ -18,8 +18,35 @@ static int     s_load_state = LOAD_LOADING;
 
 // --- Load state --------------------------------------------------------------
 
+// Loading watchdog. A request the phone accepts but never answers used to leave
+// the list on its spinner indefinitely, with exiting the app as the only way
+// out. After this long without a reply, fall to the error state -- which does
+// have a retry on it.
+#define LOAD_TIMEOUT_MS 15000
+static AppTimer *s_load_timer;
+static void (*s_stall_cb)(void) = NULL;
+
+void data_set_stall_callback(void (*cb)(void)) { s_stall_cb = cb; }
+
+static void load_stalled(void *ctx) {
+  s_load_timer = NULL;
+  if (s_load_state != LOAD_LOADING) return;
+  s_load_state = LOAD_ERROR;
+  if (s_stall_cb) s_stall_cb();
+}
+
 int  data_load_state(void)      { return s_load_state; }
-void data_set_load_state(int s) { s_load_state = s; }
+
+void data_set_load_state(int s) {
+  s_load_state = s;
+  if (s_load_timer) {
+    app_timer_cancel(s_load_timer);
+    s_load_timer = NULL;
+  }
+  if (s == LOAD_LOADING) {
+    s_load_timer = app_timer_register(LOAD_TIMEOUT_MS, load_stalled, NULL);
+  }
+}
 
 // --- Projects ----------------------------------------------------------------
 
