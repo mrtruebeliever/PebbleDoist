@@ -4,6 +4,17 @@ All notable changes to PebbleDoist are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-08-13
+
+### Added
+- **Vibrates when a task is confirmed complete** (both quick-complete after
+  its undo window and the Complete action in the task menu), respecting
+  Quiet Time.
+
+### Changed
+- Opts into the watch's own touch navigation (Pebble SDK 4.33) on the
+  project/task/label lists and the task detail screen.
+
 ## [1.3.2] - 2026-07-16
 
 ### Changed

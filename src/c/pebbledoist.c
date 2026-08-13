@@ -60,6 +60,7 @@ static void apply_quick_launch(void *data) {
 }
 
 static void init(void) {
+  app_touch_navigation_enable(true);   // opt in to system touch nav on the menus
   dictation_flow_init();
   header_bar_init();
   config_load();

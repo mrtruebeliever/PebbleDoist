@@ -87,6 +87,7 @@ static void pending_commit(void) {
   if (s_undo_timer) { app_timer_cancel(s_undo_timer); s_undo_timer = NULL; }
   if (s_pending_id[0]) {
     config_close_task(s_pending_id);            // server completes; re-stream reconciles
+    if (!quiet_time_is_active()) { vibes_short_pulse(); }
     data_remove_task_by_id(s_pending_id);       // optimistic removal (no loading flash)
     s_pending_id[0] = '\0';
     task_list_reload();
@@ -130,6 +131,7 @@ static void quick_complete(int trow) {
 static void close_performed(ActionMenu *menu, const ActionMenuItem *item, void *context) {
   if (s_sel_task_id[0]) {
     config_close_task(s_sel_task_id);
+    if (!quiet_time_is_active()) { vibes_short_pulse(); }
     data_remove_task_by_id(s_sel_task_id);   // optimistic — no loading flash
     task_list_reload();
     header_bar_refresh();
