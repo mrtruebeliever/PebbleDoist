@@ -30,6 +30,8 @@ static const char *S[LANG_COUNT][STR_COUNT] = {
     [STR_LABELS]        = "Labels",
     [STR_LABELS_SUB]    = "filter by label",
     [STR_NO_LABELS]     = "No labels",
+    [STR_SUBTASKS]      = "Subtasks",
+    [STR_ADD_SUBTASK]   = "Add subtask",
   },
   [LANG_NL] = {
     [STR_TODAY]         = "Vandaag",
@@ -57,6 +59,8 @@ static const char *S[LANG_COUNT][STR_COUNT] = {
     [STR_LABELS]        = "Labels",
     [STR_LABELS_SUB]    = "filter op label",
     [STR_NO_LABELS]     = "Geen labels",
+    [STR_SUBTASKS]      = "Subtaken",
+    [STR_ADD_SUBTASK]   = "Subtaak toevoegen",
   },
   [LANG_FR] = {
     [STR_TODAY]         = "Aujourd'hui",
@@ -84,6 +88,8 @@ static const char *S[LANG_COUNT][STR_COUNT] = {
     [STR_LABELS]        = "Étiquettes",
     [STR_LABELS_SUB]    = "filtrer par étiquette",
     [STR_NO_LABELS]     = "Aucune étiquette",
+    [STR_SUBTASKS]      = "Sous-tâches",
+    [STR_ADD_SUBTASK]   = "Ajouter une sous-tâche",
   },
   [LANG_DE] = {
     [STR_TODAY]         = "Heute",
@@ -111,6 +117,8 @@ static const char *S[LANG_COUNT][STR_COUNT] = {
     [STR_LABELS]        = "Labels",
     [STR_LABELS_SUB]    = "nach Label filtern",
     [STR_NO_LABELS]     = "Keine Labels",
+    [STR_SUBTASKS]      = "Teilaufgaben",
+    [STR_ADD_SUBTASK]   = "Teilaufgabe hinzufügen",
   },
   [LANG_ES] = {
     [STR_TODAY]         = "Hoy",
@@ -138,6 +146,8 @@ static const char *S[LANG_COUNT][STR_COUNT] = {
     [STR_LABELS]        = "Etiquetas",
     [STR_LABELS_SUB]    = "filtrar por etiqueta",
     [STR_NO_LABELS]     = "Sin etiquetas",
+    [STR_SUBTASKS]      = "Subtareas",
+    [STR_ADD_SUBTASK]   = "Añadir subtarea",
   },
 };
 

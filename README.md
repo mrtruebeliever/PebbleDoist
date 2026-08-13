@@ -20,8 +20,10 @@ stays on the phone and is never sent to the watch.
 | Overview | List | Today |
 |---|---|---|
 | ![Overview](pebbledoist_overview.png) | ![List](pebbledoist_project.png) | ![Today](pebbledoist_today.png) |
-| **Details** | **Labels** | **Actions** |
-| ![Details](pebbledoist_detail.png) | ![Labels](pebbledoist_labels.png) | ![Actions](pebbledoist_actions.png) |
+| **Details** | **Subtasks** | **Labels** |
+| ![Details](pebbledoist_detail.png) | ![Subtasks](pebbledoist_subtasks.png) | ![Labels](pebbledoist_labels.png) |
+| **Actions** | | |
+| ![Actions](pebbledoist_actions.png) | | |
 
 ## What it does
 
@@ -34,12 +36,20 @@ stays on the phone and is never sent to the watch.
   carrying it, across all your lists.
 - **Details** — select a task → **Details** to read its full title, deadline, **description**
   and **labels** (shown as coloured badges).
+- **Subtasks** — a task's open subtasks are listed in its detail view, each with a checkbox.
+  Tap one to tick it off, or walk the rows with **Up/Down** (they page through the text
+  first, then step row by row) and press **Select** — either way a short **Undo** window
+  runs before it is sent to Todoist. **Add subtask** — in the task menu or behind a long
+  press of Select in the detail view — dictates a new one straight into that task. A task row in a list
+  shows how many open subtasks it has; the subtasks themselves stay out of the list, so a
+  project shows its top-level tasks only. Today and label lists still show a subtask in its
+  own right.
 - **Add by voice** — pick **+ New task**, dictate, and the phone posts it to Todoist.
   Natural-language dates are parsed (e.g. "…friday" sets a due date). Opened via Quick
   Launch → "Dictate right away", you dictate first and pick the target list afterward.
 - **Touch** (Pebble Time 2) — tap a row to open it, drag a list to scroll it (it glides on
-  after you let go), and swipe left-to-right to go back (from the overview that leaves the
-  app, as BACK does). The buttons keep working exactly as
+  after you let go), swipe left-to-right to go back (from the overview that leaves the
+  app, as BACK does), and swipe right-to-left over a task for its menu. The buttons keep working exactly as
   before; after a touch-scroll the selection sits on the row in the middle of the screen, so
   the next button press carries on from what you are looking at.
 - **Complete / delete** — select a task to open its menu: **Complete** closes it in Todoist

@@ -23,11 +23,14 @@ var LOAD_UNCONFIGURED = 3;
 
 var MAX_PROJECTS = 16;
 var MAX_TASKS = 64;
+var MAX_SUBTASKS = 12;   // mirrors data.h
 var TODAY_ID = 'today';
 
-// In-memory cache + the list currently shown on the watch (for reloads).
+// In-memory cache + what the watch is currently showing (for reloads). `detailId`
+// is the task whose detail view is open, or '' — the watch sets it on open and
+// clears it on close, so a subtask change can refresh that view too.
 var taskCache = {};
-var current = { projectId: '' };
+var current = { projectId: '', detailId: '' };
 
 // --- Persisted phone-side state ---------------------------------------------
 
@@ -162,6 +165,7 @@ function streamTasks(tasks) {
       msg[keys.TASK_TITLE] = String(t.title).substring(0, 127);
       msg[keys.TASK_DUE] = String(t.due || '').substring(0, 31);
       msg[keys.TASK_DONE] = t.done ? 1 : 0;
+      if (t.sub) { msg[keys.TASK_SUBCOUNT] = t.sub; }   // omitted when 0 (the watch's default)
       Pebble.sendAppMessage(msg, function () { i++; next(); },
         function () { console.log('task ' + i + ' send failed'); i++; next(); });
     }
@@ -214,7 +218,7 @@ function loadProjects() {
     apiGetList('/tasks?project_id=' + encodeURIComponent(p.id) + '&limit=200', function (tasks) {
       if (tasks === null) { failures++; }
       else { taskCache[p.id] = tasks; }
-      out.push({ id: p.id, name: p.name, count: tasks ? tasks.length : 0 });
+      out.push({ id: p.id, name: p.name, count: tasks ? topLevelCount(tasks) : 0 });
       i++;
       step();
     });
@@ -252,18 +256,49 @@ function formatDue(due) {
   return String(due.string || '');
 }
 
-// Maps Todoist task objects to the small {id,title,done,due} the watch needs.
-// `prefixProject` adds "Project · " for the mixed Vandaag view.
-function mapTasks(raw, prefixProject) {
-  return (raw || []).map(function (t) {
+// A subtask in Todoist is simply a task with a parent. Counts the open children
+// each task has within `raw` — enough for a project list, where Todoist returns
+// a project's tasks and their subtasks in the same response.
+function subCounts(raw) {
+  var m = {};
+  (raw || []).forEach(function (t) {
+    if (t.parent_id) {
+      var p = String(t.parent_id);
+      m[p] = (m[p] || 0) + 1;
+    }
+  });
+  return m;
+}
+
+// Counts only top-level tasks, so a project's badge matches the rows shown.
+function topLevelCount(raw) {
+  var n = 0;
+  (raw || []).forEach(function (t) { if (!t.parent_id) { n++; } });
+  return n;
+}
+
+// Maps Todoist task objects to the small {id,title,done,due,sub} the watch needs.
+// `prefixProject` adds "Project · " for the mixed Vandaag view. `dropChildren`
+// leaves subtasks out of the list — they belong to their parent's detail view.
+// The cross-project views (Today, label) keep them: a subtask due today is a
+// task the user has to see, exactly as in Todoist itself.
+function mapTasks(raw, prefixProject, dropChildren) {
+  var counts = subCounts(raw);
+  var out = [];
+  (raw || []).forEach(function (t) {
+    if (dropChildren && t.parent_id) { return; }
     var title = String(t.content || '');
     if (prefixProject) {
       var nm = selNameById(String(t.project_id));
       if (nm) title = nm + ' · ' + title;
     }
     var done = t.is_completed || t.checked || t.completed || false;
-    return { id: t.id, title: title, done: !!done, due: formatDue(t.due) };
+    out.push({
+      id: t.id, title: title, done: !!done, due: formatDue(t.due),
+      sub: counts[String(t.id)] || 0
+    });
   });
+  return out;
 }
 
 var LABEL_PREFIX = 'label:';
@@ -293,7 +328,7 @@ function loadTasks(projectId) {
   function done(raw) {
     if (raw === null) { sendLoad(LOAD_ERROR); return; }
     if (!mixed) { taskCache[projectId] = raw; }
-    streamTasks(mapTasks(raw, mixed));
+    streamTasks(mapTasks(raw, mixed, !mixed));
   }
   if (isToday) {
     getTodayTasks(done);
@@ -315,22 +350,67 @@ function loadLabels() {
   });
 }
 
-// Fetches one task's description + labels on demand for the detail view. Always
-// replies (empty on failure) so the watch stops waiting.
-function sendTaskDetail(taskId) {
-  if (!taskId) { return; }
-  request('GET', '/tasks/' + encodeURIComponent(taskId), null, function (ok, status, data) {
-    var msg = {};
-    msg[keys.TASK_DETAIL_ID] = String(taskId);
-    if (ok && data) {
-      msg[keys.TASK_DETAIL_DESC] = String(data.description || '').substring(0, 500);
-      msg[keys.TASK_DETAIL_LABELS] = (data.labels || []).join(',').substring(0, 150);
-    } else {
-      msg[keys.TASK_DETAIL_DESC] = '';
-      msg[keys.TASK_DETAIL_LABELS] = '';
+// Fetches a task's open subtasks. v1 takes a parent_id filter; if that form is
+// refused, fall back to the parent's project list filtered here.
+function getSubtasks(taskId, projectId, cb) {
+  request('GET', '/tasks?parent_id=' + encodeURIComponent(taskId) + '&limit=100', null,
+    function (ok, status, data) {
+      if (ok) { cb(asList(data)); return; }
+      if (!projectId) { cb([]); return; }
+      apiGetList('/tasks?project_id=' + encodeURIComponent(projectId) + '&limit=200',
+        function (list) {
+          if (!list) { cb([]); return; }
+          cb(list.filter(function (t) { return String(t.parent_id || '') === String(taskId); }));
+        });
+    });
+}
+
+// Sends the detail head (description + labels + subtask count), then streams the
+// subtasks one message at a time, advancing on each ACK.
+function streamTaskDetail(taskId, desc, labels, subs) {
+  var count = Math.min(subs.length, MAX_SUBTASKS);
+  var head = {};
+  head[keys.TASK_DETAIL_ID] = String(taskId);
+  head[keys.TASK_DETAIL_DESC] = desc;
+  head[keys.TASK_DETAIL_LABELS] = labels;
+  head[keys.SUB_COUNT] = count;
+  Pebble.sendAppMessage(head, function () {
+    var i = 0;
+    function next() {
+      if (i >= count) return;
+      var msg = {};
+      msg[keys.SUB_INDEX] = i;
+      msg[keys.SUB_ID] = String(subs[i].id);
+      msg[keys.SUB_TITLE] = String(subs[i].content || '').substring(0, 95);
+      Pebble.sendAppMessage(msg, function () { i++; next(); },
+        function () { console.log('subtask ' + i + ' send failed'); i++; next(); });
     }
-    Pebble.sendAppMessage(msg);
+    next();
+  }, function () { console.log('detail head send failed'); });
+}
+
+// Fetches one task's description, labels and open subtasks on demand for the
+// detail view. Always replies (empty on failure) so the watch stops waiting.
+// An empty id means the watch closed the detail view.
+function sendTaskDetail(taskId) {
+  if (!taskId) { current.detailId = ''; return; }
+  current.detailId = String(taskId);
+  request('GET', '/tasks/' + encodeURIComponent(taskId), null, function (ok, status, data) {
+    var desc = '', labels = '', projectId = '';
+    if (ok && data) {
+      desc = String(data.description || '').substring(0, 500);
+      labels = (data.labels || []).join(',').substring(0, 150);
+      projectId = data.project_id ? String(data.project_id) : '';
+    }
+    getSubtasks(taskId, projectId, function (subs) {
+      streamTaskDetail(taskId, desc, labels, subs);
+    });
   });
+}
+
+// Re-sends the open detail view after something changed underneath it.
+function refreshDetail() {
+  if (current.detailId) { sendTaskDetail(current.detailId); }
 }
 
 // Splits a leading or trailing Dutch date phrase off the spoken text so it can be
@@ -376,17 +456,11 @@ function normalizeDue(due) {
   return d;
 }
 
-function addTask(projectId, content) {
-  if (!content) return;
-  if (!projectId || projectId === TODAY_ID) { projectId = getDefId(); }
-  if (!projectId || projectId === TODAY_ID) { sendLoad(LOAD_ERROR); return; }
-
+// Splits a dictated line into the task text and the ordered due_string
+// candidates to try, ending with '' (create without a date). Each failed attempt
+// (400) creates nothing, so retrying can't duplicate the task.
+function parseDictated(content) {
   var parts = splitDueDate(content);
-  var title = parts.content.replace(/\s*\.\s*$/, '');  // drop a dictated trailing "."
-  console.log('addTask: title="' + title + '" due="' + parts.due + '"');
-
-  // Ordered due_string candidates, ending with '' (create without a date). Each
-  // failed attempt (400) creates nothing, so retrying can't duplicate the task.
   var dues = [];
   if (parts.due) {
     dues.push(parts.due);
@@ -394,23 +468,55 @@ function addTask(projectId, content) {
     if (norm && dues.indexOf(norm) < 0) { dues.push(norm); }
   }
   dues.push('');  // last resort: plain task
+  return { title: parts.content.replace(/\s*\.\s*$/, ''), dues: dues };  // drop a dictated trailing "."
+}
 
+// Creates a task from `body` plus each due candidate in turn; cb(ok) when one
+// lands or all have failed.
+function createWithDue(body, dues, cb) {
   function attempt(i) {
-    var body = { content: title, project_id: projectId };
-    if (dues[i]) { body.due_string = dues[i]; body.due_lang = 'nl'; }
-    apiPost('/tasks', body, function (ok) {
-      if (ok) { loadTasks(projectId); syncTimeline(); return; }
+    var b = {};
+    Object.keys(body).forEach(function (k) { b[k] = body[k]; });
+    if (dues[i]) { b.due_string = dues[i]; b.due_lang = 'nl'; }
+    apiPost('/tasks', b, function (ok) {
+      if (ok) { cb(true); return; }
       if (i + 1 < dues.length) { attempt(i + 1); }
-      else { sendLoad(LOAD_ERROR); }
+      else { cb(false); }
     });
   }
   attempt(0);
 }
 
+function addTask(projectId, content) {
+  if (!content) return;
+  if (!projectId || projectId === TODAY_ID) { projectId = getDefId(); }
+  if (!projectId || projectId === TODAY_ID) { sendLoad(LOAD_ERROR); return; }
+
+  var p = parseDictated(content);
+  console.log('addTask: title="' + p.title + '" due="' + p.dues[0] + '"');
+  createWithDue({ content: p.title, project_id: projectId }, p.dues, function (ok) {
+    if (ok) { loadTasks(projectId); syncTimeline(); }
+    else { sendLoad(LOAD_ERROR); }
+  });
+}
+
+// Creates a subtask under `parentId`; it inherits the parent's project.
+function addSubtask(parentId, content) {
+  if (!parentId || !content) return;
+  var p = parseDictated(content);
+  console.log('addSubtask: title="' + p.title + '" due="' + p.dues[0] + '"');
+  createWithDue({ content: p.title, parent_id: parentId }, p.dues, function (ok) {
+    if (ok) { loadTasks(current.projectId); refreshDetail(); syncTimeline(); }
+    else { sendLoad(LOAD_ERROR); }
+  });
+}
+
 function closeTask(taskId) {
   if (!taskId) return;
   apiPost('/tasks/' + encodeURIComponent(taskId) + '/close', null, function (ok) {
-    if (ok) { loadTasks(current.projectId); syncTimeline(); }
+    // Closing a subtask from the detail view leaves that view open, so refresh it
+    // as well as the list behind it.
+    if (ok) { loadTasks(current.projectId); refreshDetail(); syncTimeline(); }
     else { sendLoad(LOAD_ERROR); }
   });
 }
@@ -588,6 +694,8 @@ Pebble.addEventListener('appmessage', function (e) {
     sendTaskDetail(String(d.REQUEST_TASK_DETAIL));
   } else if (d.ADD_TASK !== undefined) {
     addTask(String(d.PROJECT_ID || ''), String(d.ADD_TASK || ''));
+  } else if (d.ADD_SUBTASK !== undefined) {
+    addSubtask(String(d.PARENT_ID || ''), String(d.ADD_SUBTASK || ''));
   } else if (d.CLOSE_TASK !== undefined) {
     closeTask(String(d.CLOSE_TASK));
   } else if (d.DELETE_TASK !== undefined) {

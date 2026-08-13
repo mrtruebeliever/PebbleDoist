@@ -143,6 +143,36 @@ static void apply_task(DictionaryIterator *iter) {
     tk->due[TASK_DUE_LEN - 1] = '\0';
   }
   tk->done = (t = dict_find(iter, MESSAGE_KEY_TASK_DONE)) ? (tuple_int(t) != 0) : false;
+  int subs = (t = dict_find(iter, MESSAGE_KEY_TASK_SUBCOUNT)) ? tuple_int(t) : 0;
+  if (subs < 0) subs = 0;
+  if (subs > 255) subs = 255;
+  tk->sub_count = (uint8_t)subs;
+}
+
+// Copies one subtask out of a per-subtask AppMessage (detail view stream).
+static void apply_subtask(DictionaryIterator *iter) {
+  Tuple *t_idx = dict_find(iter, MESSAGE_KEY_SUB_INDEX);
+  if (!t_idx) return;
+  int idx = tuple_int(t_idx);
+  Subtask *s = data_subtask(idx);
+  if (!s) return;
+
+  if (idx >= data_subtask_count()) {
+    data_set_subtask_count(idx + 1);  // reveal rows progressively
+  }
+
+  Tuple *t;
+  if ((t = dict_find(iter, MESSAGE_KEY_SUB_ID))) {
+    strncpy(s->id, t->value->cstring, TASK_ID_LEN - 1);
+    s->id[TASK_ID_LEN - 1] = '\0';
+  }
+  if ((t = dict_find(iter, MESSAGE_KEY_SUB_TITLE))) {
+    strncpy(s->title, t->value->cstring, SUB_TITLE_LEN - 1);
+    s->title[SUB_TITLE_LEN - 1] = '\0';
+  }
+  // Only open subtasks are streamed; `done` is set locally while a tick waits
+  // out its undo window.
+  s->done = false;
 }
 
 // Copies one label's name out of a per-label AppMessage.
@@ -231,12 +261,18 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
   if ((t = dict_find(iter, MESSAGE_KEY_LABEL_COUNT))) {
     data_clear_labels();
   }
+  // Subtask head, sent with the task-detail reply; the subtasks follow. Never
+  // cached (the detail view always fetches fresh).
+  if ((t = dict_find(iter, MESSAGE_KEY_SUB_COUNT))) {
+    data_clear_subtasks();
+  }
 
   // Per-record streams (one message at a time).
   apply_project(iter);
   apply_task(iter);
   apply_label(iter);
   apply_task_detail(iter);
+  apply_subtask(iter);
 
   // Once every announced record has arrived, snapshot the list to the cache so
   // the next visit paints instantly. Runs once per stream (total reset to -1).
@@ -290,6 +326,14 @@ void config_add_task(const char *project_id, const char *content) {
   if (app_message_outbox_begin(&out) != APP_MSG_OK) return;
   dict_write_cstring(out, MESSAGE_KEY_ADD_TASK, content ? content : "");
   dict_write_cstring(out, MESSAGE_KEY_PROJECT_ID, project_id ? project_id : "");
+  app_message_outbox_send();
+}
+
+void config_add_subtask(const char *parent_id, const char *content) {
+  DictionaryIterator *out;
+  if (app_message_outbox_begin(&out) != APP_MSG_OK) return;
+  dict_write_cstring(out, MESSAGE_KEY_ADD_SUBTASK, content ? content : "");
+  dict_write_cstring(out, MESSAGE_KEY_PARENT_ID, parent_id ? parent_id : "");
   app_message_outbox_send();
 }
 

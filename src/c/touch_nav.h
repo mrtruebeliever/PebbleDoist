@@ -15,6 +15,9 @@ typedef enum {
   TOUCH_NAV_NONE = 0,   // nothing to do (drag in progress, or a stray gesture)
   TOUCH_NAV_TAP,        // finger went down and up in the same spot
   TOUCH_NAV_BACK,       // left-to-right swipe: go back one window
+  // Right-to-left swipe: show what can be done with the row under the finger
+  // (out_point holds the touchdown point, as it does for a tap).
+  TOUCH_NAV_ACTIONS,
   // Vertical flicks, reported only for a window with nothing to scroll (pass
   // NULL as the scroll layer). A scrolling window swallows them as the drag.
   TOUCH_NAV_SWIPE_UP,

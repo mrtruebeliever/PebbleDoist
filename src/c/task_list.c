@@ -152,6 +152,22 @@ static void detail_performed(ActionMenu *menu, const ActionMenuItem *item, void 
   task_detail_push(&s_sel_task);
 }
 
+// Dictated subtask: created as a child of the task the menu was opened on. The
+// phone reloads the list afterwards, so the row's subtask counter catches up.
+static void add_sub_result(DictationResult result, const char *transcript) {
+  if (result == DICTATION_RESULT_SUCCESS && transcript && transcript[0] && s_sel_task_id[0]) {
+    config_add_subtask(s_sel_task_id, transcript);
+  }
+}
+
+// Deferred: the action menu is still on the window stack while `performed` runs,
+// and its teardown would take the dictation window down with it.
+static void start_add_subtask(void *ctx) { dictation_flow_start(add_sub_result); }
+
+static void add_sub_performed(ActionMenu *menu, const ActionMenuItem *item, void *context) {
+  app_timer_register(50, start_add_subtask, NULL);
+}
+
 static void close_menu_did_close(ActionMenu *menu, const ActionMenuItem *performed, void *context) {
   action_menu_hierarchy_destroy((ActionMenuLevel *)context, NULL, NULL);
 }
@@ -164,9 +180,10 @@ static void open_task_menu(Task *t) {
 
   // Complete first (the most common action, so it's the default-highlighted item);
   // Delete opens a one-item confirm level so it can't fire on an accidental scroll.
-  ActionMenuLevel *root = action_menu_level_create(3);
+  ActionMenuLevel *root = action_menu_level_create(4);
   action_menu_level_add_action(root, i18n(STR_COMPLETE), close_performed, NULL);
   action_menu_level_add_action(root, i18n(STR_DETAILS), detail_performed, NULL);
+  action_menu_level_add_action(root, i18n(STR_ADD_SUBTASK), add_sub_performed, NULL);
   ActionMenuLevel *confirm = action_menu_level_create(1);
   action_menu_level_add_action(confirm, i18n(STR_CONFIRM_DEL), delete_performed, NULL);
   action_menu_level_add_child(root, confirm, i18n(STR_DELETE));
@@ -267,6 +284,34 @@ static void draw_done_row(GContext *ctx, GRect b, Task *t, bool hl, RowMetrics m
   graphics_draw_line(ctx, GPoint(16, b.size.h / 2 + 4), GPoint(23, b.size.h / 2 - 5));
 }
 
+// Draws the open-subtask counter at the right of a row's bottom line: a small
+// elbow (the "has children" mark) followed by the number. Returns the width it
+// used, including the gap before it, so the due label can shrink to fit.
+#define SUB_ICON_W 8
+#define SUB_GAP    6
+
+static int draw_sub_count(GContext *ctx, GRect b, Task *t, bool hl) {
+  if (t->sub_count == 0) { return 0; }
+  char buf[6];
+  snprintf(buf, sizeof(buf), "%d", (int)t->sub_count);
+  GFont f = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+  GSize ns = graphics_text_layout_get_content_size(
+      buf, f, GRect(0, 0, 40, DUE_LINE_H), GTextOverflowModeFill, GTextAlignmentLeft);
+
+  int total = SUB_ICON_W + 3 + ns.w;
+  int x = b.size.w - 4 - total;
+  int y = b.size.h - DUE_LINE_H - 1;
+  GColor c = hl ? GColorBlack : GColorDarkGray;
+
+  graphics_context_set_stroke_color(ctx, c);
+  graphics_draw_line(ctx, GPoint(x + 1, y + 3), GPoint(x + 1, y + 10));
+  graphics_draw_line(ctx, GPoint(x + 1, y + 10), GPoint(x + SUB_ICON_W, y + 10));
+  graphics_context_set_text_color(ctx, c);
+  graphics_draw_text(ctx, buf, f, GRect(x + SUB_ICON_W + 3, y, ns.w + 2, DUE_LINE_H),
+                     GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+  return total + SUB_GAP;
+}
+
 static void draw_task_row(GContext *ctx, const Layer *cell, Task *t) {
   GRect b = layer_get_bounds(cell);
   bool hl = menu_cell_layer_is_highlighted(cell);
@@ -274,10 +319,12 @@ static void draw_task_row(GContext *ctx, const Layer *cell, Task *t) {
 
   if (t->done) { draw_done_row(ctx, b, t, hl, m); return; }
 
-  // Title: full width on one line. With a due date it sits near the top (due goes on
-  // the bottom line); without one it is vertically centred so the row has no gap.
+  // Title: full width on one line. When the row has a bottom line (a due date, a
+  // subtask counter, or both) the title sits near the top; otherwise it is
+  // vertically centred so the row has no gap.
   bool has_due = t->due[0];
-  int ty = has_due ? m.text_y : (b.size.h - m.text_h) / 2;
+  bool has_sub = t->sub_count > 0;
+  int ty = (has_due || has_sub) ? m.text_y : (b.size.h - m.text_h) / 2;
   graphics_context_set_text_color(ctx, GColorBlack);
   if (hl) {
     // Selected row: marquee the title on one line (no ellipsis).
@@ -291,11 +338,13 @@ static void draw_task_row(GContext *ctx, const Layer *cell, Task *t) {
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   }
 
-  // Due date: a small gray line at the bottom of the row (shown selected or not).
+  // Bottom line: the due date on the left, the open-subtask counter on the right
+  // (either may be absent). Shown selected or not.
+  int sub_w = draw_sub_count(ctx, b, t, hl);
   if (has_due) {
     graphics_context_set_text_color(ctx, hl ? GColorBlack : GColorDarkGray);
     graphics_draw_text(ctx, t->due, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                       GRect(34, b.size.h - DUE_LINE_H - 1, b.size.w - 38, DUE_LINE_H),
+                       GRect(34, b.size.h - DUE_LINE_H - 1, b.size.w - 38 - sub_w, DUE_LINE_H),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   }
 
@@ -476,6 +525,20 @@ void task_list_handle_touch(const TouchEvent *event) {
       MenuIndex index = MenuIndex(0, (uint16_t)row);
       menu_layer_set_selected_index(s_menu, index, MenuRowAlignNone, false);
       select_click(s_menu, &index, NULL);
+      break;
+    }
+    // Swipe left over a task: its menu (Complete / Details / Add subtask /
+    // Delete). Without this the menu is button-only, and with quick-complete on
+    // a tap ticks the task off — leaving no way to reach Details by touch.
+    case TOUCH_NAV_ACTIONS: {
+      if (!list_ready() || data_task_count() == 0) { return; }
+      int row = touch_nav_row_at(s_menu, point, get_num_rows(s_menu, 0, NULL), get_cell_height);
+      if (row < 0) { return; }
+      Task *t = data_task(row - add_rows());
+      if (!t || !t->id[0]) { return; }
+      menu_layer_set_selected_index(s_menu, MenuIndex(0, (uint16_t)row), MenuRowAlignNone, false);
+      layer_mark_dirty(menu_layer_get_layer(s_menu));
+      open_task_menu(t);
       break;
     }
     case TOUCH_NAV_BACK:

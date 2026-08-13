@@ -4,6 +4,35 @@ All notable changes to PebbleDoist are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-08-13
+
+### Added
+- **Subtasks.** A task's subtasks now live in its detail view: a "Subtasks (n)"
+  section listing the open ones, each with a checkbox. Tap a row — or pick it
+  from the Select menu — to tick it off; like quick-complete, it waits out a
+  short undo window (tap again to undo) before it is sent to Todoist, and
+  vibrates when it commits, respecting Quiet Time.
+- **Subtask counter on a task row.** A task with open subtasks shows a small
+  branch mark and their number on the right of its bottom line.
+- **Buttons walk the subtask list.** In the detail view Up/Down page through the
+  text as before, and once the subtask section comes into view they step from
+  row to row (the focused row is highlighted); **Select** ticks the focused one
+  off. With nothing focused, Select opens the action menu — and a long press
+  always does, so "Add subtask" stays reachable from anywhere in the view.
+- **Swipe left on a task** to open its menu (Complete / Details / Add subtask /
+  Delete). Previously the menu was button-only: with quick-complete on, a tap
+  ticks the task off, which left no way to reach Details by touch.
+- **"Add subtask"** in the task menu and in the detail view's Select menu:
+  dictate the text and it is created as a child of that task, in the same
+  project. Dates in the spoken line are parsed exactly as for a new task.
+
+### Changed
+- **Subtasks no longer clutter a project's task list.** Todoist returns a
+  project's subtasks alongside its tasks; they used to appear as ordinary rows
+  with nothing to tie them to their parent. A project list now shows top-level
+  tasks only, and its badge counts those. Today and label lists still show a
+  subtask in its own right — a subtask due today is work you have to see.
+
 ## [1.4.0] - 2026-08-13
 
 ### Added

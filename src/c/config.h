@@ -48,6 +48,7 @@ void config_request_tasks(const char *project_id);  // load a list; TODAY_PROJEC
 void config_request_labels(void);                   // load the label list
 void config_request_task_detail(const char *task_id); // fetch one task's description + labels
 void config_add_task(const char *project_id, const char *content);
+void config_add_subtask(const char *parent_id, const char *content);  // child of a task
 void config_close_task(const char *task_id);
 void config_delete_task(const char *task_id);
 void config_request_refresh(void);                  // reload the project list

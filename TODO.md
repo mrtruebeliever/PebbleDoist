@@ -26,8 +26,16 @@ Effort: **S** small · **M** medium · **L** large.
   with *Sort* (priority/due) and *Text size*, so those aren't phone-only. **S**
 - **AppGlance complication** — surface today's open count on the watchface via AppGlance,
   updated by the phone on refresh. **S–M**
-- **Subtasks / sections** — Todoist returns `parent_id` / `section_id`; start with section
-  headers, defer real nesting. **L**
+- **Sections** — Todoist returns `section_id`; group a project's tasks under section headers.
+  (Subtasks shipped in 1.5.0: parent-only lists, a counter per row, and the children in the
+  detail view.) **M**
+- **Touch inside menus** — the system `ActionMenu` cannot be driven by touch: the SDK 4.33 API
+  is opaque (open/close/freeze only, no way to move the selection or read the layout) and the
+  window belongs to the system, so no recognizer can be attached to it. The only route is
+  replacing every menu with an own MenuLayer window. Deliberately **not** done: the app's
+  menus stay the system ones, on the expectation that a later firmware makes the system touch
+  bridge usable in apps (see [PebbleOS#1865](https://github.com/coredevices/PebbleOS/issues/1865)).
+  Re-test before building anything. **L**
 - **Search / filter** — dictation-driven "find task" that filters the current list (phone does
   the matching; no keyboard). **M**
 - **Quick-add from Today / label lists** — those contexts have no "+ New task"; add one that

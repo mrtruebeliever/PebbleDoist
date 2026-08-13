@@ -1,7 +1,7 @@
 {
   "name": "pebbledoist",
   "author": "mrtruebeliever",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "license": "MIT",
   "keywords": ["pebble-app"],
   "private": true,
@@ -44,9 +44,12 @@
       "TASK_TITLE",
       "TASK_DUE",
       "TASK_DONE",
+      "TASK_SUBCOUNT",
       "REQUEST_TASKS",
       "PROJECT_ID",
       "ADD_TASK",
+      "ADD_SUBTASK",
+      "PARENT_ID",
       "CLOSE_TASK",
       "DELETE_TASK",
       "REFRESH",
@@ -58,7 +61,11 @@
       "REQUEST_TASK_DETAIL",
       "TASK_DETAIL_ID",
       "TASK_DETAIL_DESC",
-      "TASK_DETAIL_LABELS"
+      "TASK_DETAIL_LABELS",
+      "SUB_COUNT",
+      "SUB_INDEX",
+      "SUB_ID",
+      "SUB_TITLE"
     ],
     "resources": {
       "media": [

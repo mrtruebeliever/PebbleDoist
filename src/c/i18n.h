@@ -42,6 +42,8 @@ typedef enum {
   STR_LABELS,         // "Labels"
   STR_LABELS_SUB,     // "filter by label"
   STR_NO_LABELS,      // "No labels"
+  STR_SUBTASKS,       // "Subtasks" (detail-view section header)
+  STR_ADD_SUBTASK,    // "Add subtask"
   STR_COUNT,
 } StrId;
 

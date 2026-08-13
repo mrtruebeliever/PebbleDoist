@@ -107,6 +107,11 @@ TouchNavGesture touch_nav_feed(ScrollLayer *scroll, const TouchEvent *event, GPo
         stop_glide();
         return TOUCH_NAV_BACK;
       }
+      if (int_abs(dx) > int_abs(dy) && dx <= -BACK_SWIPE_MIN) {
+        stop_glide();
+        s_dragging = false;
+        return TOUCH_NAV_ACTIONS;
+      }
       // Nothing to scroll: report the flick instead, so a window can page or
       // move a selection with it.
       if (!s_scroll && int_abs(dy) > int_abs(dx) && int_abs(dy) >= BACK_SWIPE_MIN) {
