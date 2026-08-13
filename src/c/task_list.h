@@ -17,4 +17,8 @@ void task_list_push(const char *list_id, const char *title, TaskListMode mode);
 
 void task_list_reload(void);
 bool task_list_is_shown(void);
+
+// Raw touch, forwarded from the app-wide subscription while this window is on top.
+bool task_list_is_top(void);
+void task_list_handle_touch(const TouchEvent *event);
 void task_list_destroy(void);

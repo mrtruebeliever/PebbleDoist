@@ -37,6 +37,11 @@ stays on the phone and is never sent to the watch.
 - **Add by voice** — pick **+ New task**, dictate, and the phone posts it to Todoist.
   Natural-language dates are parsed (e.g. "…friday" sets a due date). Opened via Quick
   Launch → "Dictate right away", you dictate first and pick the target list afterward.
+- **Touch** (Pebble Time 2) — tap a row to open it, drag a list to scroll it (it glides on
+  after you let go), and swipe left-to-right to go back (from the overview that leaves the
+  app, as BACK does). The buttons keep working exactly as
+  before; after a touch-scroll the selection sits on the row in the middle of the screen, so
+  the next button press carries on from what you are looking at.
 - **Complete / delete** — select a task to open its menu: **Complete** closes it in Todoist
   (instantly, no waiting), or **Delete** (with a confirmation) removes it.
 - **Quick-complete** *(optional)* — turn it on in the phone settings and a single **Select**

@@ -11,3 +11,7 @@ void task_detail_reload(void);
 
 // True while the detail window is on top (so incoming replies know to reload it).
 bool task_detail_is_shown(void);
+
+// Raw touch, forwarded from the app-wide subscription while this window is on top.
+bool task_detail_is_top(void);
+void task_detail_handle_touch(const TouchEvent *event);

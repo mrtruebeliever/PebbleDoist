@@ -7,6 +7,7 @@
 #include "theme.h"
 #include "header_bar.h"
 #include "dictation_flow.h"
+#include "touch_nav.h"
 
 static Window    *s_window = NULL;
 static MenuLayer *s_menu = NULL;
@@ -122,8 +123,10 @@ static uint16_t get_num_rows(MenuLayer *ml, uint16_t section, void *ctx) {
   return 1;  // status row
 }
 
+#define ROW_HEIGHT 44
+
 static int16_t get_cell_height(MenuLayer *ml, MenuIndex *ci, void *ctx) {
-  return 44;
+  return ROW_HEIGHT;
 }
 
 static void draw_text_row(GContext *ctx, const Layer *cell, const char *title, const char *sub) {
@@ -210,6 +213,54 @@ static void select_long_click(MenuLayer *ml, MenuIndex *ci, void *ctx) {
   open_options_menu();
 }
 
+// --- Touch -------------------------------------------------------------------
+//
+// The system touch bridge (app_touch_navigation_enable) is unusable on firmware
+// 4.33.1: it faults inside firmware on the very first touch and kills the app.
+// So this window takes touch itself, from the raw event stream — see touch_nav.
+
+// After a drag or glide the highlight can be off screen, which would make SELECT
+// act on an invisible row and the next UP/DOWN yank the list back. Move the
+// selection to the row in the middle of the window: always fully visible, and
+// where button navigation puts it anyway, so the first button press does not
+// jump. MenuRowAlignNone leaves the list exactly where the finger left it.
+static void touch_settled(void) {
+  if (!s_menu) { return; }
+  GRect frame = layer_get_frame(menu_layer_get_layer(s_menu));
+  int row = touch_nav_row_at(s_menu, GPoint(frame.size.w / 2, frame.origin.y + frame.size.h / 2),
+                             get_num_rows(s_menu, 0, NULL), get_cell_height);
+  if (row >= 0) {
+    menu_layer_set_selected_index(s_menu, MenuIndex(0, (uint16_t)row), MenuRowAlignNone, false);
+    // MenuRowAlignNone does not scroll, and without a scroll the menu never
+    // repaints — the highlight would stay invisible until the next button press.
+    layer_mark_dirty(menu_layer_get_layer(s_menu));
+  }
+}
+
+bool project_list_is_top(void) {
+  return s_window && window_stack_get_top_window() == s_window;
+}
+
+void project_list_handle_touch(const TouchEvent *event) {
+  if (!s_menu) { return; }
+  GPoint point;
+  switch (touch_nav_feed(menu_layer_get_scroll_layer(s_menu), event, &point)) {
+    case TOUCH_NAV_TAP: {
+      int row = touch_nav_row_at(s_menu, point, get_num_rows(s_menu, 0, NULL), get_cell_height);
+      if (row < 0) { return; }   // the header bar, or past the last row
+      // Select the row the finger hit, then run what SELECT would have run.
+      MenuIndex index = MenuIndex(0, (uint16_t)row);
+      menu_layer_set_selected_index(s_menu, index, MenuRowAlignNone, false);
+      select_click(s_menu, &index, NULL);
+      break;
+    }
+    case TOUCH_NAV_BACK:
+      window_stack_pop(true);   // root window, so this leaves the app — same as BACK
+    default:
+      break;
+  }
+}
+
 // --- Refresh indicator -------------------------------------------------------
 
 static void refresh_bar_update(Layer *layer, GContext *ctx) {
@@ -253,9 +304,13 @@ static void window_load(Window *window) {
   // Branded accent top bar (icon + name + open-task count + time).
   s_header = header_bar_create(b.size.w);
   layer_add_child(root, s_header);
+
+  // Take touch away from the system bridge and handle it here (see above).
+  window_set_touch_bridge_disabled(window, true);
 }
 
 static void window_unload(Window *window) {
+  touch_nav_reset();   // stop any glide before its scroll layer goes away
   menu_layer_destroy(s_menu);
   s_menu = NULL;
   if (s_refresh_bar) { layer_destroy(s_refresh_bar); s_refresh_bar = NULL; }
@@ -264,6 +319,11 @@ static void window_unload(Window *window) {
 
 static void window_appear(Window *window) {
   header_bar_set_active(s_header, "PebbleDoist", HEADER_COUNT_PROJECTS_TOTAL);
+  touch_nav_set_settled_handler(touch_settled);
+}
+
+static void window_disappear(Window *window) {
+  touch_nav_reset();
 }
 
 Window *project_list_window(void) {
@@ -274,6 +334,7 @@ Window *project_list_window(void) {
       .load = window_load,
       .unload = window_unload,
       .appear = window_appear,
+      .disappear = window_disappear,
     });
   }
   return s_window;

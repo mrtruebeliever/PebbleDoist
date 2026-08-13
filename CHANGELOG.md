@@ -4,6 +4,24 @@ All notable changes to PebbleDoist are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-08-13
+
+### Added
+- **Touch navigation on the Pebble Time 2.** Tap a row to open it, drag the list
+  to scroll it (it keeps gliding when you let go, and stops at the ends), and
+  swipe left-to-right to go back — from the overview that leaves the app, exactly
+  as the BACK button does. The selection lands on the row in the middle of the window after a
+  scroll, so the buttons carry on from what you are looking at instead of
+  jumping back.
+
+### Changed
+- **Reverted the 1.3.3 opt-in into the system touch bridge.** On firmware 4.33.1
+  `app_touch_navigation_enable(true)` faults inside firmware on the first touch
+  and kills the app, in every app that opts in. Touch is now handled from the
+  raw touch stream inside the app (`src/c/touch_nav.c`), which does not go
+  through the bridge. Reported as
+  [PebbleOS#1865](https://github.com/coredevices/PebbleOS/issues/1865).
+
 ## [1.3.3] - 2026-08-13
 
 ### Added

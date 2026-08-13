@@ -3,6 +3,7 @@
 #include "data.h"
 #include "i18n.h"
 #include "theme.h"
+#include "touch_nav.h"
 #include <pebble.h>
 
 static Window      *s_window = NULL;
@@ -168,18 +169,37 @@ static void build(Window *window) {
   layer_add_child(root, scroll_layer_get_layer(s_scroll));
 }
 
+// --- Touch -------------------------------------------------------------------
+//
+// Raw touch handled by hand; the system bridge crashes the app on firmware
+// 4.33.1 (see project_list.c and touch_nav.h). Nothing here is tappable, so a
+// drag scrolls the text and a left-to-right swipe goes back.
+
+bool task_detail_is_top(void) {
+  return s_window && window_stack_get_top_window() == s_window;
+}
+
+void task_detail_handle_touch(const TouchEvent *event) {
+  if (!s_scroll) { return; }
+  if (touch_nav_feed(s_scroll, event, NULL) == TOUCH_NAV_BACK) {
+    window_stack_pop(true);
+  }
+}
+
 static void window_load(Window *window) {
   build(window);
+  window_set_touch_bridge_disabled(window, true);
 }
 
 static void window_unload(Window *window) {
+  touch_nav_reset();
   clear_layers();
   window_destroy(s_window);
   s_window = NULL;
 }
 
 static void window_appear(Window *window)    { s_shown = true; }
-static void window_disappear(Window *window) { s_shown = false; }
+static void window_disappear(Window *window) { s_shown = false; touch_nav_reset(); }
 
 void task_detail_push(const Task *t) {
   if (!t) { return; }

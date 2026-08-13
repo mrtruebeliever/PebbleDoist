@@ -7,6 +7,7 @@
 #include "dictation_flow.h"
 #include "task_detail.h"
 #include "header_bar.h"
+#include "touch_nav.h"
 
 static Window    *s_window = NULL;
 static MenuLayer *s_menu = NULL;
@@ -441,6 +442,50 @@ static void update_refresh_bar(void) {
   layer_set_hidden(s_refresh_bar, !refreshing);
 }
 
+// --- Touch -------------------------------------------------------------------
+//
+// Raw touch handled by hand; the system bridge crashes the app on firmware
+// 4.33.1 (see project_list.c and touch_nav.h).
+
+// Keeps the selection on a visible row after a drag or glide — see the longer
+// explanation in project_list.c.
+static void touch_settled(void) {
+  if (!s_menu) { return; }
+  GRect frame = layer_get_frame(menu_layer_get_layer(s_menu));
+  int row = touch_nav_row_at(s_menu, GPoint(frame.size.w / 2, frame.origin.y + frame.size.h / 2),
+                             get_num_rows(s_menu, 0, NULL), get_cell_height);
+  if (row >= 0) {
+    menu_layer_set_selected_index(s_menu, MenuIndex(0, (uint16_t)row), MenuRowAlignNone, false);
+    // MenuRowAlignNone does not scroll, and without a scroll the menu never
+    // repaints — the highlight would stay invisible until the next button press.
+    layer_mark_dirty(menu_layer_get_layer(s_menu));
+  }
+}
+
+bool task_list_is_top(void) {
+  return s_window && window_stack_get_top_window() == s_window;
+}
+
+void task_list_handle_touch(const TouchEvent *event) {
+  if (!s_menu) { return; }
+  GPoint point;
+  switch (touch_nav_feed(menu_layer_get_scroll_layer(s_menu), event, &point)) {
+    case TOUCH_NAV_TAP: {
+      int row = touch_nav_row_at(s_menu, point, get_num_rows(s_menu, 0, NULL), get_cell_height);
+      if (row < 0) { return; }
+      MenuIndex index = MenuIndex(0, (uint16_t)row);
+      menu_layer_set_selected_index(s_menu, index, MenuRowAlignNone, false);
+      select_click(s_menu, &index, NULL);
+      break;
+    }
+    case TOUCH_NAV_BACK:
+      window_stack_pop(true);
+      break;
+    default:
+      break;
+  }
+}
+
 // --- Window ------------------------------------------------------------------
 
 static void window_load(Window *window) {
@@ -470,9 +515,12 @@ static void window_load(Window *window) {
 
   s_header = header_bar_create(b.size.w);
   layer_add_child(root, s_header);
+
+  window_set_touch_bridge_disabled(window, true);
 }
 
 static void window_unload(Window *window) {
+  touch_nav_reset();
   marquee_stop();
   menu_layer_destroy(s_menu);
   s_menu = NULL;
@@ -488,9 +536,11 @@ static void window_appear(Window *window) {
   header_bar_set_active(s_header, s_title, HEADER_COUNT_TASKS);   // project / Today / label name
   update_refresh_bar();
   marquee_start();
+  touch_nav_set_settled_handler(touch_settled);
 }
 static void window_disappear(Window *window) {
   s_shown = false;
+  touch_nav_reset();
   marquee_stop();
   pending_commit();   // finalize a quick-complete if the user navigates away mid-window
 }
