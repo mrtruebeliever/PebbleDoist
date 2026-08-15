@@ -4,6 +4,54 @@ All notable changes to PebbleDoist are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-08-15
+
+### Changed
+- **Back on the system touch bridge**, undoing the 1.4.0 revert. Firmware 4.33.2
+  carries the fix for [PebbleOS#1865](https://github.com/coredevices/PebbleOS/issues/1865)
+  (PR #1866), so `app_touch_navigation_enable(true)` no longer kills the app.
+  Scrolling, swipe-back and — the reason for going back at all — touch inside the
+  system **ActionMenu** now come from the firmware instead of from the app.
+
+### Added
+- **One tap acts.** The firmware's own `MenuLayer` takes two taps: the first only
+  moves the selection, the second opens the row. A tap recognizer of the app's
+  own, marked simultaneous so it runs alongside the system's rather than being
+  skipped as a duplicate, acts on the first tap.
+- **Subtasks are tappable again.** The firmware drops taps on a `ScrollLayer`
+  outright ("a ScrollLayer has no tap action"), and a Tier-1 widget excludes the
+  touch→button bridge, so the detail view received no taps at all.
+- **The middle row highlights after a scroll.** A plain menu's selection is left
+  exactly where it was by the firmware — possibly off-screen, with nothing lit and
+  the next button press yanking the list back. A pan recognizer of the app's own
+  reselects the row in the middle on liftoff.
+- **Touch injection for the emulator** (`tools/touch.py`,
+  `tools/qemu-touch-wrapper.sh`). The pebble tool has no touch command, but
+  qemu-pebble does emulate the PT2 touchscreen, so touch goes in over QEMU's QMP
+  socket — the same route the firmware repo's own `./pbl touch` uses. Needs SDK
+  4.33.1 or newer; the 4.33 emulator image still faults on the bridge.
+
+### Fixed
+- **The 1.3.3 opt-in never actually ran.** `pebbledoist.c` did not include
+  `touch_nav.h`, so `TOUCH_NAV_SYSTEM_BRIDGE` was an undefined macro — silently 0
+  in `#if` — and the app kept subscribing to the raw touch stream whatever the
+  header said. A raw subscriber also disables the system bridge app-wide, which
+  is why the ActionMenu stayed dead to touch.
+- **One nudge no longer counts twice.** The tap and pan budgets are both 10px, so
+  a small quick drag could complete both recognizers — reselecting the middle row
+  and opening a row that was never meant to be tapped. A started pan now takes the
+  gesture and the tap stands down.
+
+### Removed
+- **Swipe right-to-left over a task no longer opens its menu.** The firmware
+  ignores left swipes on a `MenuLayer` by design ("activate-on-swipe is
+  intentionally disabled"), so the gesture added in 1.5.0 cannot survive on the
+  system bridge. A long press of **Select** still opens the menu, from anywhere in
+  the list — worth knowing with quick-complete on, where a tap ticks the task off.
+- **Lists no longer coast after your finger.** The firmware settles the scroll
+  offset at liftoff and has no inertia; the app's own kinetic glide only applied
+  to the raw touch path.
+
 ## [1.5.0] - 2026-08-13
 
 ### Added

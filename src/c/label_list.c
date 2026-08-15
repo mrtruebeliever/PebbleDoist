@@ -66,6 +66,7 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *ci, void *c) {
 }
 
 static void select_click(MenuLayer *ml, MenuIndex *ci, void *ctx) {
+  touch_tap_note_action();
   if (!list_ready()) {
     // Retry from the loading row too: if the phone swallowed the first
     // request, pressing the only row on screen should re-issue it.
@@ -144,6 +145,19 @@ void label_list_handle_touch(const TouchEvent *event) {
 
 // --- Window ------------------------------------------------------------------
 
+#if TOUCH_NAV_SYSTEM_BRIDGE
+// The system only moves the selection on the first tap and opens the row on a
+// second one; open the row the finger actually hit, straight away.
+static void tap_at(GPoint point) {
+  if (!s_menu || touch_tap_action_just_ran()) { return; }
+  int row = touch_nav_row_at(s_menu, point, get_num_rows(s_menu, 0, NULL), get_cell_height);
+  if (row < 0) { return; }
+  MenuIndex index = MenuIndex(0, (uint16_t)row);
+  menu_layer_set_selected_index(s_menu, index, MenuRowAlignNone, false);
+  select_click(s_menu, &index, NULL);
+}
+#endif
+
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect b = layer_get_bounds(root);
@@ -169,10 +183,16 @@ static void window_load(Window *window) {
   s_header = header_bar_create(b.size.w);
   layer_add_child(root, s_header);
 
+#if TOUCH_NAV_SYSTEM_BRIDGE
+  touch_tap_attach(window, tap_at);
+  touch_settle_attach(window, touch_settled);
+#else
   window_set_touch_bridge_disabled(window, true);
+#endif
 }
 
 static void window_unload(Window *window) {
+  touch_gestures_release(window);
   touch_nav_reset();
   if (s_menu) { menu_layer_destroy(s_menu); s_menu = NULL; }
   if (s_refresh_bar) { layer_destroy(s_refresh_bar); s_refresh_bar = NULL; }

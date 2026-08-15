@@ -9,6 +9,10 @@
 #include "label_list.h"
 #include "task_detail.h"
 #include "header_bar.h"
+// Defines TOUCH_NAV_SYSTEM_BRIDGE, which picks the touch path below. Without
+// this include the macro is silently 0 and the app subscribes to the raw touch
+// stream no matter what the header says.
+#include "touch_nav.h"
 
 // Fired by config_inbox_received whenever incoming data changes: redraw
 // whichever window is currently visible.
@@ -59,17 +63,18 @@ static void apply_quick_launch(void *data) {
   }
 }
 
-// Subscribing is what powers the touch sensor on, and it is the one touch path
-// proven safe on firmware 4.33.1 (the system navigation bridge is not — see the
-// note further down). Events go to the window on top; when that is something the
-// system owns (an ActionMenu, the dictation UI), none of these match and the
-// event is dropped rather than acted on behind the user's back.
+#if !TOUCH_NAV_SYSTEM_BRIDGE
+// Subscribing is what powers the touch sensor on. Events go to the window on
+// top; when that is something the system owns (an ActionMenu, the dictation UI),
+// none of these match and the event is dropped rather than acted on behind the
+// user's back.
 static void touch_dispatch(const TouchEvent *event, void *context) {
   if (task_detail_is_top())        { task_detail_handle_touch(event); }
   else if (label_list_is_top())    { label_list_handle_touch(event); }
   else if (task_list_is_top())     { task_list_handle_touch(event); }
   else if (project_list_is_top())  { project_list_handle_touch(event); }
 }
+#endif
 
 static void init(void) {
   dictation_flow_init();
@@ -89,15 +94,19 @@ static void init(void) {
 
   window_stack_push(project_list_window(), true);
 
+#if TOUCH_NAV_SYSTEM_BRIDGE
+  // Hand touch to the system: taps become SELECT, swipe right becomes BACK, and
+  // the MenuLayers scroll like the system UI. Safe again as of firmware 4.33.2
+  // (see touch_nav.h); on 4.33.1 and earlier this line kills the app on the
+  // first touch.
+  app_touch_navigation_enable(true);
+  APP_LOG(APP_LOG_LEVEL_INFO, "touch: system bridge on, enabled=%d",
+          (int)touch_service_is_enabled());
+#else
   touch_service_subscribe(touch_dispatch, NULL);
   APP_LOG(APP_LOG_LEVEL_INFO, "touch: subscribed, enabled=%d",
           (int)touch_service_is_enabled());
-
-  // NOTE: do not call app_touch_navigation_enable() here. On firmware 4.33.1 the
-  // system touch bridge faults inside firmware on the very first touch, killing
-  // the app (identical PC/LR across apps, before any app code runs). Touch in
-  // this app is handled per window with gesture recognizers instead — see
-  // project_list.c. Re-test the bridge on a later firmware before restoring it.
+#endif
 
   // The start-view setting only applies to a Quick-Launch open; a normal
   // launcher start always lands on the project overview.

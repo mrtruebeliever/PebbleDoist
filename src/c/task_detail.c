@@ -569,12 +569,31 @@ void task_detail_handle_touch(const TouchEvent *event) {
   }
 }
 
+#if TOUCH_NAV_SYSTEM_BRIDGE
+// The content here sits in a ScrollLayer, which the system scrolls by touch but
+// whose taps it drops outright — so without this the subtasks cannot be ticked
+// off by finger at all.
+static void tap_at(GPoint point) {
+  int i = subtask_at(point);
+  Subtask *s = (i >= 0) ? data_subtask(i) : NULL;
+  if (s && s->id[0]) {
+    s_focus = i;             // buttons carry on from the row just tapped
+    subtask_toggle(s->id);
+  }
+}
+#endif
+
 static void window_load(Window *window) {
   build(window);
+#if TOUCH_NAV_SYSTEM_BRIDGE
+  touch_tap_attach(window, tap_at);
+#else
   window_set_touch_bridge_disabled(window, true);
+#endif
 }
 
 static void window_unload(Window *window) {
+  touch_gestures_release(window);
   touch_nav_reset();
   clear_layers();
   // Tell the phone the detail view is gone, so a later task change doesn't
