@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Generates the store marketing icons (rounded-square app-icon logos): a dark
 checklist with the top item checked in the Todoist-ish red accent. Rendered at 4x
-and downsampled for smooth edges. Mirrors Demi's marketing/ layout."""
+and downsampled for smooth edges. Written to store/ with the rest of the
+appstore assets."""
 import os
 from PIL import Image, ImageDraw
 
@@ -56,7 +57,7 @@ def render(size):
     return img.resize((size, size), Image.LANCZOS)
 
 
-os.makedirs("marketing", exist_ok=True)
+os.makedirs("store", exist_ok=True)
 for sz in (80, 144):
-    render(sz).save("marketing/icon-%d.png" % sz)
-    print("wrote marketing/icon-%d.png" % sz)
+    render(sz).save("store/icon-%d.png" % sz)
+    print("wrote store/icon-%d.png" % sz)
