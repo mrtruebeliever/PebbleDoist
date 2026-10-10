@@ -99,6 +99,10 @@ static void badges_update(Layer *layer, GContext *ctx) {
 #define SUB_ROW_PAD    5
 #define SUB_BOX       14   // checkbox size
 #define SUB_TEXT_X    22
+// Where the rows start inside the subtask layer. A round screen widens the layer
+// to the full width so the highlight can reach the bezel, and the rows keep
+// their place at the page margin.
+#define SUBS_OX       PBL_IF_ROUND_ELSE(28, 0)
 
 static char      s_sub_pending[TASK_ID_LEN] = "";
 static AppTimer *s_sub_timer = NULL;
@@ -161,9 +165,15 @@ static int render_subtasks(GContext *ctx, int ox, int oy, int width, bool draw) 
       int box_y = ry + SUB_ROW_PAD;
       bool focused = (i == s_focus);
       if (focused) {
-        // Same highlight as the list rows: accent fill, black text.
+        // Same highlight as the list rows: accent fill, black text. On a round
+        // screen it runs out to the bezel, as the lists' does; the section's
+        // layer spans the full width there, with the rows at `ox`.
         graphics_context_set_fill_color(ctx, theme_highlight_bg());
+#if defined(PBL_ROUND)
+        graphics_fill_rect(ctx, GRect(0, ry, 2 * ox + width, rh), 0, GCornerNone);
+#else
         graphics_fill_rect(ctx, GRect(ox - 3, ry, width + 6, rh), 3, GCornersAll);
+#endif
       }
       GColor ink = (s->done && !focused) ? theme_row_dim(false) : theme_row_fg(focused);
       graphics_context_set_text_color(ctx, ink);
@@ -192,7 +202,7 @@ static int render_subtasks(GContext *ctx, int ox, int oy, int width, bool draw) 
 
 static void subs_update(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
-  render_subtasks(ctx, 0, 0, b.size.w, true);
+  render_subtasks(ctx, SUBS_OX, 0, b.size.w - 2 * SUBS_OX, true);
 }
 
 // Send the pending tick to the server and drop the row (the phone re-fetches the
@@ -337,10 +347,16 @@ static int row_top(int i) {
   return y;
 }
 
-// Scrolls just enough to bring the focused row fully into view.
+// Scrolls just enough to bring the focused row fully into view. A round screen
+// centres it instead, where the circle is widest, as its lists keep the
+// selection in the middle.
 static void reveal_row(int i) {
   int top = row_top(i);
   if (top < 0) { return; }
+#if defined(PBL_ROUND)
+  scroll_to(-(top + s_sub_h[i] / 2 - visible_h() / 2), true);
+  return;
+#endif
   int shown = -scroll_layer_get_content_offset(s_scroll).y;   // px scrolled down
   int bottom = top + s_sub_h[i];
   if (top - 4 < shown) { scroll_to(-(top - 4), true); }
@@ -518,14 +534,16 @@ static void build(Window *window) {
   if (subs_h > 0) {
     snprintf(s_sub_hdr, sizeof(s_sub_hdr), "%s (%d)", i18n(STR_SUBTASKS), data_subtask_count());
     y += 8;
-    s_subs = layer_create(GRect(pad_x, y, w, subs_h));
+    s_subs = layer_create(GRect(pad_x - SUBS_OX, y, w + 2 * SUBS_OX, subs_h));
     layer_set_update_proc(s_subs, subs_update);
     scroll_layer_add_child(s_scroll, s_subs);
     y += subs_h;
   }
 
-  // Round: room at the end to scroll the last line up out of the narrow bottom.
-  scroll_layer_set_content_size(s_scroll, GSize(bounds.size.w, y + PBL_IF_ROUND_ELSE(40, 6)));
+  // Round: room at the end to scroll the last line up out of the narrow bottom,
+  // and with subtasks enough to bring the last one up to the middle.
+  int tail = PBL_IF_ROUND_ELSE(subs_h > 0 ? bounds.size.h / 2 : 40, 6);
+  scroll_layer_set_content_size(s_scroll, GSize(bounds.size.w, y + tail));
   layer_add_child(root, scroll_layer_get_layer(s_scroll));
 }
 
