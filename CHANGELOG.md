@@ -20,7 +20,9 @@ All notable changes to PebbleDoist are documented here. The format is based on
   load (new `TODAY_COUNT` message key).
 - **Pebble Round 2 (`gabbro`) and Pebble 2 Duo (`flint`).** On the round screen
   the header shows the clock above a centred title (with the open-task count),
-  the lists are inset from the curved sides, and the task detail centres its
+  the selected row's colour runs out to the bezel while the rows' text slides
+  along the curved edge as the list scrolls, as in the system launcher, and the
+  task detail centres its
   title and keeps clear of the edges. On black-and-white the red highlight
   becomes black with white text, and the header turns white. The 144px screen
   gets a smaller header clock and a smaller description font.

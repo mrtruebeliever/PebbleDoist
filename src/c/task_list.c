@@ -237,16 +237,16 @@ static int16_t get_cell_height(MenuLayer *ml, MenuIndex *ci, void *ctx) {
 }
 
 static void draw_add_row(GContext *ctx, const Layer *cell) {
-  GRect b = layer_get_bounds(cell);
+  GRect b = theme_row_bounds(cell);
   bool hl = menu_cell_layer_is_highlighted(cell);
   // Dark text on the red highlight reads better in low light than white.
   graphics_context_set_text_color(ctx, theme_row_fg(hl));
   graphics_draw_text(ctx, i18n(STR_NEW_TASK), fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
-                     GRect(8, 0, b.size.w - 12, 28),
+                     GRect(b.origin.x + 8, 0, b.size.w - 12, 28),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   graphics_context_set_text_color(ctx, theme_row_dim(hl));
   graphics_draw_text(ctx, i18n(STR_DICTATE), fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                     GRect(8, 26, b.size.w - 12, 16),
+                     GRect(b.origin.x + 8, 26, b.size.w - 12, 16),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 }
 
@@ -263,7 +263,7 @@ static void draw_done_row(GContext *ctx, GRect b, Task *t, bool hl, RowMetrics m
   int ty = (b.size.h - m.text_h) / 2;   // no due line here — centre it vertically
   GColor dim = theme_row_dim(hl);
   graphics_context_set_text_color(ctx, dim);
-  graphics_draw_text(ctx, t->title, m.font, GRect(34, ty, title_w, m.text_h),
+  graphics_draw_text(ctx, t->title, m.font, GRect(b.origin.x + 34, ty, title_w, m.text_h),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   // Strike-through, only as wide as the (clamped) title text.
   GSize tsz = graphics_text_layout_get_content_size(
@@ -271,18 +271,18 @@ static void draw_done_row(GContext *ctx, GRect b, Task *t, bool hl, RowMetrics m
   int strike_w = tsz.w < title_w ? tsz.w : title_w;
   int sy = ty + m.text_h / 2;
   graphics_context_set_stroke_color(ctx, dim);
-  graphics_draw_line(ctx, GPoint(34, sy), GPoint(34 + strike_w, sy));
+  graphics_draw_line(ctx, GPoint(b.origin.x + 34, sy), GPoint(b.origin.x + 34 + strike_w, sy));
 
   // "Undo" hint on the right.
   graphics_context_set_text_color(ctx, theme_row_accent(hl));
-  graphics_draw_text(ctx, undo, hint_font, GRect(b.size.w - 4 - uw, (b.size.h - 16) / 2, uw, 16),
+  graphics_draw_text(ctx, undo, hint_font, GRect(b.origin.x + b.size.w - 4 - uw, (b.size.h - 16) / 2, uw, 16),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
   // Ticked checkbox.
   graphics_context_set_stroke_color(ctx, theme_row_fg(hl));
-  graphics_draw_round_rect(ctx, GRect(10, b.size.h / 2 - 8, 16, 16), 3);
-  graphics_draw_line(ctx, GPoint(13, b.size.h / 2), GPoint(16, b.size.h / 2 + 4));
-  graphics_draw_line(ctx, GPoint(16, b.size.h / 2 + 4), GPoint(23, b.size.h / 2 - 5));
+  graphics_draw_round_rect(ctx, GRect(b.origin.x + 10, b.size.h / 2 - 8, 16, 16), 3);
+  graphics_draw_line(ctx, GPoint(b.origin.x + 13, b.size.h / 2), GPoint(b.origin.x + 16, b.size.h / 2 + 4));
+  graphics_draw_line(ctx, GPoint(b.origin.x + 16, b.size.h / 2 + 4), GPoint(b.origin.x + 23, b.size.h / 2 - 5));
 }
 
 // Draws the open-subtask counter at the right of a row's bottom line: a small
@@ -300,7 +300,7 @@ static int draw_sub_count(GContext *ctx, GRect b, Task *t, bool hl) {
       buf, f, GRect(0, 0, 40, DUE_LINE_H), GTextOverflowModeFill, GTextAlignmentLeft);
 
   int total = SUB_ICON_W + 3 + ns.w;
-  int x = b.size.w - 4 - total;
+  int x = b.origin.x + b.size.w - 4 - total;
   int y = b.size.h - DUE_LINE_H - 1;
   GColor c = theme_row_dim(hl);
 
@@ -314,7 +314,7 @@ static int draw_sub_count(GContext *ctx, GRect b, Task *t, bool hl) {
 }
 
 static void draw_task_row(GContext *ctx, const Layer *cell, Task *t) {
-  GRect b = layer_get_bounds(cell);
+  GRect b = theme_row_bounds(cell);
   bool hl = menu_cell_layer_is_highlighted(cell);
   RowMetrics m = row_metrics();
 
@@ -329,13 +329,13 @@ static void draw_task_row(GContext *ctx, const Layer *cell, Task *t) {
   graphics_context_set_text_color(ctx, theme_row_fg(hl));
   if (hl) {
     // Selected row: marquee the title on one line (no ellipsis).
-    graphics_draw_text(ctx, t->title, m.font, GRect(34 - s_marq_offset, ty, 4000, m.text_h),
+    graphics_draw_text(ctx, t->title, m.font, GRect(b.origin.x + 34 - s_marq_offset, ty, 4000, m.text_h),
                        GTextOverflowModeFill, GTextAlignmentLeft, NULL);
     // Re-paint the checkbox column so scrolled text never runs under it.
     graphics_context_set_fill_color(ctx, theme_highlight_bg());
-    graphics_fill_rect(ctx, GRect(0, 0, 34, b.size.h), 0, GCornerNone);
+    graphics_fill_rect(ctx, GRect(0, 0, b.origin.x + 34, b.size.h), 0, GCornerNone);
   } else {
-    graphics_draw_text(ctx, t->title, m.font, GRect(34, ty, b.size.w - 40, m.text_h),
+    graphics_draw_text(ctx, t->title, m.font, GRect(b.origin.x + 34, ty, b.size.w - 40, m.text_h),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   }
 
@@ -345,17 +345,17 @@ static void draw_task_row(GContext *ctx, const Layer *cell, Task *t) {
   if (has_due) {
     graphics_context_set_text_color(ctx, theme_row_dim(hl));
     graphics_draw_text(ctx, t->due, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                       GRect(34, b.size.h - DUE_LINE_H - 1, b.size.w - 38 - sub_w, DUE_LINE_H),
+                       GRect(b.origin.x + 34, b.size.h - DUE_LINE_H - 1, b.size.w - 38 - sub_w, DUE_LINE_H),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   }
 
   // Empty checkbox, drawn last so it stays visible on the scrolling row.
   graphics_context_set_stroke_color(ctx, theme_row_fg(hl));
-  graphics_draw_round_rect(ctx, GRect(10, b.size.h / 2 - 8, 16, 16), 3);
+  graphics_draw_round_rect(ctx, GRect(b.origin.x + 10, b.size.h / 2 - 8, 16, 16), 3);
 }
 
 static void draw_status_row(GContext *ctx, const Layer *cell) {
-  GRect b = layer_get_bounds(cell);
+  GRect b = theme_row_bounds(cell);
   bool hl = menu_cell_layer_is_highlighted(cell);
   const char *title, *sub;
   if (data_load_state() != LOAD_OK) {
@@ -370,11 +370,11 @@ static void draw_status_row(GContext *ctx, const Layer *cell) {
   }
   graphics_context_set_text_color(ctx, theme_row_fg(hl));
   graphics_draw_text(ctx, title, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
-                     GRect(8, 2, b.size.w - 12, 28),
+                     GRect(b.origin.x + 8, 2, b.size.w - 12, 28),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   graphics_context_set_text_color(ctx, PBL_IF_COLOR_ELSE(GColorDarkGray, theme_row_fg(hl)));
   graphics_draw_text(ctx, sub, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                     GRect(8, 26, b.size.w - 12, 16),
+                     GRect(b.origin.x + 8, 26, b.size.w - 12, 16),
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 }
 
@@ -438,7 +438,7 @@ static void marquee_tick(void *ctx) {
       if (t && t->id[0]) {
         RowMetrics m = row_metrics();
         GRect fr = layer_get_frame(menu_layer_get_layer(s_menu));
-        int avail = fr.size.w - 40;
+        int avail = fr.size.w - 2 * THEME_FOCUSED_ROW_INSET - 40;
         GSize ts = graphics_text_layout_get_content_size(
             t->title, m.font,
             GRect(0, 0, 4000, m.text_h), GTextOverflowModeFill, GTextAlignmentLeft);
@@ -572,8 +572,7 @@ static void window_load(Window *window) {
   GRect b = layer_get_bounds(root);
 
   int top = HEADER_BAR_HEIGHT;
-  s_menu = menu_layer_create(GRect(THEME_LIST_INSET, top, b.size.w - 2 * THEME_LIST_INSET,
-                                   b.size.h - top));
+  s_menu = menu_layer_create(GRect(0, top, b.size.w, b.size.h - top));
   menu_layer_set_callbacks(s_menu, NULL, (MenuLayerCallbacks){
     .get_num_rows = get_num_rows,
     .get_cell_height = get_cell_height,
