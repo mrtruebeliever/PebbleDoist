@@ -23,8 +23,9 @@ static int32_t tuple_int(const Tuple *t) {
 }
 
 static int  s_lang = LANG_EN;
-static int  s_font_size = FONT_SIZE_MEDIUM;
+static int  s_font_size = FONT_SIZE_AUTO;
 static bool s_quick_complete = false;
+static bool s_done_sound = false;
 static int  s_start_view = START_VIEW_OVERVIEW;
 static char s_default_proj_id[PROJ_ID_LEN]   = "";
 static char s_default_proj_name[PROJ_NAME_LEN] = "";
@@ -57,12 +58,23 @@ static int resolve_lang(int stored) {
 
 // Falls back to the default for anything outside the select's options.
 static int resolve_font_size(int stored) {
-  return (stored >= FONT_SIZE_SMALL && stored <= FONT_SIZE_LARGE) ? stored : FONT_SIZE_MEDIUM;
+  return (stored >= FONT_SIZE_SMALL && stored <= FONT_SIZE_AUTO) ? stored : FONT_SIZE_AUTO;
+}
+
+// AUTO maps the watch's text size (Settings → Display) onto the three row
+// sizes. Medium rows are what the firmware's default size should look like:
+// Large on screens 200px and taller, Medium below.
+static int effective_font_size(int setting) {
+  if (setting != FONT_SIZE_AUTO) return setting;
+  int def = PBL_DISPLAY_HEIGHT >= 200 ? PreferredContentSizeLarge : PreferredContentSizeMedium;
+  int step = (int)preferred_content_size() - def;
+  return step < 0 ? FONT_SIZE_SMALL : (step > 0 ? FONT_SIZE_LARGE : FONT_SIZE_MEDIUM);
 }
 
 int         config_lang(void)                { return s_lang; }
-int         config_font_size(void)           { return s_font_size; }
+int         config_font_size(void)           { return effective_font_size(s_font_size); }
 bool        config_quick_complete(void)      { return s_quick_complete; }
+bool        config_done_sound(void)          { return s_done_sound; }
 int         config_start_view(void)          { return s_start_view; }
 const char *config_default_project_id(void)  { return s_default_proj_id; }
 const char *config_default_project_name(void){ return s_default_proj_name; }
@@ -78,6 +90,9 @@ void config_load(void) {
   }
   if (persist_exists(PERSIST_QUICK_COMPLETE)) {
     s_quick_complete = persist_read_int(PERSIST_QUICK_COMPLETE) != 0;
+  }
+  if (persist_exists(PERSIST_DONE_SOUND)) {
+    s_done_sound = persist_read_int(PERSIST_DONE_SOUND) != 0;
   }
   if (persist_exists(PERSIST_START_VIEW)) {
     s_start_view = persist_read_int(PERSIST_START_VIEW);
@@ -223,6 +238,10 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     s_quick_complete = tuple_int(t) != 0;
     persist_write_int(PERSIST_QUICK_COMPLETE, s_quick_complete ? 1 : 0);
   }
+  if ((t = dict_find(iter, MESSAGE_KEY_DONE_SOUND))) {
+    s_done_sound = tuple_int(t) != 0;
+    persist_write_int(PERSIST_DONE_SOUND, s_done_sound ? 1 : 0);
+  }
 
   // Persisted quick-launch settings from Clay.
   if ((t = dict_find(iter, MESSAGE_KEY_START_VIEW))) {
@@ -245,6 +264,9 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
 
   if ((t = dict_find(iter, MESSAGE_KEY_LOAD_STATE))) {
     data_set_load_state(tuple_int(t));
+  }
+  if ((t = dict_find(iter, MESSAGE_KEY_TODAY_COUNT))) {
+    data_set_today_count(tuple_int(t));
   }
 
   // Head messages reset the relevant list; items arrive in following messages.

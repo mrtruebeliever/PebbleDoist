@@ -6,7 +6,8 @@
 // Replaces the plain system StatusBarLayer. Custom-drawn so the time is kept fresh
 // via a single app-wide minute tick (no per-window subscription).
 
-#define HEADER_BAR_HEIGHT 28
+// Round: two centred lines (clock, then title) below the bezel's curve.
+#define HEADER_BAR_HEIGHT PBL_IF_ROUND_ELSE(44, 28)
 
 // Which open-task count the badge shows for the active window.
 typedef enum {

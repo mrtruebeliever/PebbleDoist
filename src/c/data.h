@@ -69,6 +69,12 @@ void data_set_load_state(int s);
 // LOAD_ERROR; the app registers its redraw here.
 void data_set_stall_callback(void (*cb)(void));
 
+// --- Vandaag count -----------------------------------------------------------
+// Open tasks in the Vandaag list as the phone last reported them (with the
+// project list, and with every Vandaag load). -1 until it has this session.
+int  data_today_count(void);
+void data_set_today_count(int n);
+
 // --- Projects ----------------------------------------------------------------
 int      data_project_count(void);
 void     data_set_project_count(int n);   // clamps to MAX_PROJECTS

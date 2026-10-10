@@ -35,12 +35,12 @@ static int16_t get_cell_height(MenuLayer *ml, MenuIndex *ci, void *ctx) {
 static void draw_text_row(GContext *ctx, const Layer *cell, const char *title, const char *sub) {
   GRect b = layer_get_bounds(cell);
   bool hl = menu_cell_layer_is_highlighted(cell);
-  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_context_set_text_color(ctx, theme_row_fg(hl));
   graphics_draw_text(ctx, title, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
                      GRect(8, 0, b.size.w - 12, 28),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   if (sub && sub[0]) {
-    graphics_context_set_text_color(ctx, hl ? GColorBlack : GColorDarkGray);
+    graphics_context_set_text_color(ctx, theme_row_dim(hl));
     graphics_draw_text(ctx, sub, fonts_get_system_font(FONT_KEY_GOTHIC_14),
                        GRect(8, 26, b.size.w - 12, 16),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
@@ -163,7 +163,8 @@ static void window_load(Window *window) {
   GRect b = layer_get_bounds(root);
 
   int top = HEADER_BAR_HEIGHT;
-  s_menu = menu_layer_create(GRect(0, top, b.size.w, b.size.h - top));
+  s_menu = menu_layer_create(GRect(THEME_LIST_INSET, top, b.size.w - 2 * THEME_LIST_INSET,
+                                   b.size.h - top));
   menu_layer_set_callbacks(s_menu, NULL, (MenuLayerCallbacks){
     .get_num_rows = get_num_rows,
     .get_cell_height = get_cell_height,
@@ -171,7 +172,7 @@ static void window_load(Window *window) {
     .select_click = select_click,
   });
   menu_layer_set_normal_colors(s_menu, GColorWhite, GColorBlack);
-  menu_layer_set_highlight_colors(s_menu, theme_accent(), GColorBlack);
+  menu_layer_set_highlight_colors(s_menu, theme_highlight_bg(), theme_row_fg(true));
   menu_layer_set_click_config_onto_window(s_menu, window);
   layer_add_child(root, menu_layer_get_layer(s_menu));
 

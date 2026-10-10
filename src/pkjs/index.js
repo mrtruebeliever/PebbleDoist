@@ -1,4 +1,4 @@
-var Clay = require('pebble-clay');
+var Clay = require('@rebble/clay');
 var buildConfig = require('./i18n').buildConfig;
 var keys = require('message_keys');
 
@@ -46,14 +46,16 @@ function getAllProjects() {
   catch (e) { return []; }
 }
 
-// Task-list text size: 0=small, 1=medium (default), 2=large (mirrors config.h).
+// Task-list text size: 0=small, 1=medium, 2=large, 3=follow the watch (default;
+// mirrors config.h).
 function getFontSize() {
   var v = parseInt(localStorage.getItem('FONT_SIZE'), 10);
-  return (v >= 0 && v <= 2) ? v : 1;
+  return (v >= 0 && v <= 3) ? v : 3;
 }
 
 // Quick-complete: Select on a task completes it. Default off.
 function getQuickComplete() { return localStorage.getItem('QUICK_COMPLETE') === '1'; }
+function getDoneSound() { return localStorage.getItem('DONE_SOUND') === '1'; }
 
 function getStartView() { return parseInt(localStorage.getItem('START_VIEW') || '0', 10) || 0; }
 function getDefId() { return localStorage.getItem('DEF_ID') || ''; }
@@ -126,11 +128,13 @@ function sendLoad(state) {
 }
 
 // Streams the project list one message at a time, advancing on each ACK.
-function streamProjects(projects) {
+// `todayCount` (null if unknown) rides along for the launcher glance.
+function streamProjects(projects, todayCount) {
   var count = Math.min(projects.length, MAX_PROJECTS);
   var head = {};
   head[keys.PROJ_COUNT] = count;
   head[keys.LOAD_STATE] = LOAD_OK;
+  if (todayCount !== null) { head[keys.TODAY_COUNT] = todayCount; }
   Pebble.sendAppMessage(head, function () {
     var i = 0;
     function next() {
@@ -149,11 +153,13 @@ function streamProjects(projects) {
 }
 
 // Streams the task list one message at a time, advancing on each ACK.
-function streamTasks(tasks) {
+// `todayCount` is set only for the Vandaag list, so the glance follows it.
+function streamTasks(tasks, todayCount) {
   var count = Math.min(tasks.length, MAX_TASKS);
   var head = {};
   head[keys.TASK_COUNT] = count;
   head[keys.LOAD_STATE] = LOAD_OK;
+  if (todayCount !== undefined) { head[keys.TODAY_COUNT] = todayCount; }
   Pebble.sendAppMessage(head, function () {
     var i = 0;
     function next() {
@@ -211,7 +217,10 @@ function loadProjects() {
   function step() {
     if (i >= sel.length) {
       if (out.length === 0 && failures > 0) { sendLoad(LOAD_ERROR); return; }
-      streamProjects(out);
+      // One more request for the Vandaag count the launcher glance shows.
+      getTodayTasks(function (today) {
+        streamProjects(out, today ? today.length : null);
+      });
       return;
     }
     var p = sel[i];
@@ -328,7 +337,7 @@ function loadTasks(projectId) {
   function done(raw) {
     if (raw === null) { sendLoad(LOAD_ERROR); return; }
     if (!mixed) { taskCache[projectId] = raw; }
-    streamTasks(mapTasks(raw, mixed, !mixed));
+    streamTasks(mapTasks(raw, mixed, !mixed), isToday ? raw.length : undefined);
   }
   if (isToday) {
     getTodayTasks(done);
@@ -734,6 +743,7 @@ function settingsSnapshot() {
     langRaw: getLangRaw(),
     fontSize: getFontSize(),
     quickComplete: getQuickComplete(),
+    doneSound: getDoneSound(),
     startView: getStartView(),
     defId: getDefId(),
     tlEnabled: getTimelineEnabled()
@@ -766,8 +776,9 @@ Pebble.addEventListener('webviewclosed', function (e) {
   var lang = parseInt(pick('LANGUAGE'), 10);
   if (isNaN(lang)) { lang = 255; }  // 255 = Automatic (follow watch locale)
   var fontSize = parseInt(pick('FONT_SIZE'), 10);
-  if (!(fontSize >= 0 && fontSize <= 2)) { fontSize = 1; }
+  if (!(fontSize >= 0 && fontSize <= 3)) { fontSize = 3; }
   var quickComplete = !!pick('QUICK_COMPLETE');
+  var doneSound = !!pick('DONE_SOUND');
   var startView = parseInt(pick('START_VIEW'), 10) || 0;
   var defId = (pick('DEFAULT_PROJECT') || '').toString();
   var defName = (defId === TODAY_ID) ? '' : nameForId(defId, all);
@@ -785,6 +796,7 @@ Pebble.addEventListener('webviewclosed', function (e) {
   localStorage.setItem('LANG', String(lang));
   localStorage.setItem('FONT_SIZE', String(fontSize));
   localStorage.setItem('QUICK_COMPLETE', quickComplete ? '1' : '0');
+  localStorage.setItem('DONE_SOUND', doneSound ? '1' : '0');
   localStorage.setItem('START_VIEW', String(startView));
   localStorage.setItem('DEF_ID', defId);
   localStorage.setItem('DEF_NAME', defName);
@@ -796,6 +808,7 @@ Pebble.addEventListener('webviewclosed', function (e) {
   msg[keys.LANGUAGE] = lang;
   msg[keys.FONT_SIZE] = fontSize;
   msg[keys.QUICK_COMPLETE] = quickComplete ? 1 : 0;
+  msg[keys.DONE_SOUND] = doneSound ? 1 : 0;
   msg[keys.START_VIEW] = startView;
   msg[keys.DEFAULT_PROJECT_ID] = defId;
   msg[keys.DEFAULT_PROJECT_NAME] = defName;

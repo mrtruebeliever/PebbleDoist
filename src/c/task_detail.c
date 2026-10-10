@@ -1,4 +1,5 @@
 #include "task_detail.h"
+#include "sfx.h"
 #include "config.h"
 #include "data.h"
 #include "dictation_flow.h"
@@ -65,9 +66,9 @@ static int render_badges(GContext *ctx, int ox, int oy, int width, bool draw) {
 
       if (draw) {
         GRect pill = GRect(ox + x, oy + y, pill_w, BADGE_H);
-        graphics_context_set_fill_color(ctx, theme_accent());
+        graphics_context_set_fill_color(ctx, theme_highlight_bg());
         graphics_fill_rect(ctx, pill, 4, GCornersAll);
-        graphics_context_set_text_color(ctx, GColorBlack);
+        graphics_context_set_text_color(ctx, theme_row_fg(true));
         graphics_draw_text(ctx, start, font,
                            GRect(pill.origin.x + BADGE_HPAD, pill.origin.y + 1,
                                  pill_w - 2 * BADGE_HPAD, 16),
@@ -123,7 +124,7 @@ static int render_subtasks(GContext *ctx, int ox, int oy, int width, bool draw) 
   if (draw) {
     graphics_context_set_stroke_color(ctx, GColorLightGray);
     graphics_draw_line(ctx, GPoint(ox, oy + 3), GPoint(ox + width, oy + 3));
-    graphics_context_set_text_color(ctx, theme_accent());
+    graphics_context_set_text_color(ctx, theme_accent_text());
     graphics_draw_text(ctx, s_sub_hdr, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                        GRect(ox, oy + 6, width, 22),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
@@ -161,15 +162,16 @@ static int render_subtasks(GContext *ctx, int ox, int oy, int width, bool draw) 
       bool focused = (i == s_focus);
       if (focused) {
         // Same highlight as the list rows: accent fill, black text.
-        graphics_context_set_fill_color(ctx, theme_accent());
+        graphics_context_set_fill_color(ctx, theme_highlight_bg());
         graphics_fill_rect(ctx, GRect(ox - 3, ry, width + 6, rh), 3, GCornersAll);
       }
-      graphics_context_set_text_color(ctx, (s->done && !focused) ? GColorDarkGray : GColorBlack);
+      GColor ink = (s->done && !focused) ? theme_row_dim(false) : theme_row_fg(focused);
+      graphics_context_set_text_color(ctx, ink);
       graphics_draw_text(ctx, s->title, font,
                          GRect(ox + SUB_TEXT_X, ry + SUB_ROW_PAD - 3, text_w, ts.h + 4),
                          GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
 
-      graphics_context_set_stroke_color(ctx, (s->done && !focused) ? GColorDarkGray : GColorBlack);
+      graphics_context_set_stroke_color(ctx, ink);
       graphics_draw_round_rect(ctx, GRect(ox, box_y, SUB_BOX, SUB_BOX), 3);
       if (s->done) {
         // Tick inside the box.
@@ -177,7 +179,7 @@ static int render_subtasks(GContext *ctx, int ox, int oy, int width, bool draw) 
         graphics_draw_line(ctx, GPoint(ox + 6, box_y + 10), GPoint(ox + 11, box_y + 3));
       }
       if (pending) {
-        graphics_context_set_text_color(ctx, focused ? GColorBlack : theme_accent());
+        graphics_context_set_text_color(ctx, theme_row_accent(focused));
         graphics_draw_text(ctx, i18n(STR_UNDO), hint_font,
                            GRect(ox + width - hint_w, ry + SUB_ROW_PAD - 1, hint_w, 18),
                            GTextOverflowModeFill, GTextAlignmentRight, NULL);
@@ -199,7 +201,7 @@ static void sub_pending_commit(void) {
   if (s_sub_timer) { app_timer_cancel(s_sub_timer); s_sub_timer = NULL; }
   if (!s_sub_pending[0]) { return; }
   config_close_task(s_sub_pending);
-  if (!quiet_time_is_active()) { vibes_short_pulse(); }
+  sfx_task_done();
   data_remove_subtask_by_id(s_sub_pending);
   s_sub_pending[0] = '\0';
   task_detail_reload();
@@ -296,7 +298,7 @@ static void open_detail_menu(void) {
 
   ActionMenuConfig cfg = {
     .root_level = root,
-    .colors = { .background = theme_accent(), .foreground = GColorBlack },
+    .colors = { .background = theme_highlight_bg(), .foreground = theme_row_fg(true) },
     .align = ActionMenuAlignCenter,
     .did_close = detail_menu_did_close,
     .context = root,
@@ -427,8 +429,14 @@ static void build(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(root);
 
-  const int pad = 6;
-  const int w = bounds.size.w - pad * 2;
+  // A round screen needs more room at the sides and the top, where the circle
+  // cuts in; the text still scrolls up into the middle, where it is widest.
+  const int pad_x = PBL_IF_ROUND_ELSE(28, 6);
+  const int pad_top = PBL_IF_ROUND_ELSE(30, 6);
+  // The title's first lines sit where the circle is still narrow: centred, they
+  // follow its curve instead of running into it.
+  const GTextAlignment head_align = PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft);
+  const int w = bounds.size.w - pad_x * 2;
 
   s_scroll = scroll_layer_create(bounds);
   scroll_layer_set_callbacks(s_scroll, (ScrollLayerCallbacks){
@@ -440,18 +448,19 @@ static void build(Window *window) {
   GFont title_font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
   GSize ts = graphics_text_layout_get_content_size(
       s_title_buf, title_font, GRect(0, 0, w, 2000),
-      GTextOverflowModeWordWrap, GTextAlignmentLeft);
+      GTextOverflowModeWordWrap, head_align);
   int title_h = ts.h + 6;
 
-  s_title = text_layer_create(GRect(pad, pad, w, title_h));
+  s_title = text_layer_create(GRect(pad_x, pad_top, w, title_h));
   text_layer_set_font(s_title, title_font);
   text_layer_set_background_color(s_title, GColorClear);
   text_layer_set_text_color(s_title, GColorBlack);
   text_layer_set_overflow_mode(s_title, GTextOverflowModeWordWrap);
+  text_layer_set_text_alignment(s_title, head_align);
   text_layer_set_text(s_title, s_title_buf);
   scroll_layer_add_child(s_scroll, text_layer_get_layer(s_title));
 
-  int y = pad + title_h + 8;
+  int y = pad_top + title_h + 8;
 
   // Due (accent), if any.
   if (s_due_buf[0]) {
@@ -460,11 +469,12 @@ static void build(Window *window) {
         s_due_buf, due_font, GRect(0, 0, w, 2000),
         GTextOverflowModeWordWrap, GTextAlignmentLeft);
     int due_h = ds.h + 4;
-    s_due = text_layer_create(GRect(pad, y, w, due_h));
+    s_due = text_layer_create(GRect(pad_x, y, w, due_h));
     text_layer_set_font(s_due, due_font);
     text_layer_set_background_color(s_due, GColorClear);
-    text_layer_set_text_color(s_due, theme_accent());
+    text_layer_set_text_color(s_due, theme_accent_text());
     text_layer_set_overflow_mode(s_due, GTextOverflowModeWordWrap);
+    text_layer_set_text_alignment(s_due, head_align);
     text_layer_set_text(s_due, s_due_buf);
     scroll_layer_add_child(s_scroll, text_layer_get_layer(s_due));
     y += due_h + 6;
@@ -473,12 +483,15 @@ static void build(Window *window) {
   // Description (GOTHIC_24), once the phone's detail reply has arrived.
   const char *desc = data_detail_desc();
   if (data_detail_ready() && desc[0]) {
-    GFont desc_font = fonts_get_system_font(FONT_KEY_GOTHIC_24);
+    // The 144px screen takes the description a size down, so a line holds
+    // more than two or three words.
+    GFont desc_font = fonts_get_system_font(PBL_DISPLAY_WIDTH < 180 ? FONT_KEY_GOTHIC_18
+                                                                    : FONT_KEY_GOTHIC_24);
     GSize es = graphics_text_layout_get_content_size(
         desc, desc_font, GRect(0, 0, w, 4000),
         GTextOverflowModeWordWrap, GTextAlignmentLeft);
     int desc_h = es.h + 4;
-    s_desc = text_layer_create(GRect(pad, y, w, desc_h));
+    s_desc = text_layer_create(GRect(pad_x, y, w, desc_h));
     text_layer_set_font(s_desc, desc_font);
     text_layer_set_background_color(s_desc, GColorClear);
     text_layer_set_text_color(s_desc, GColorBlack);
@@ -491,7 +504,7 @@ static void build(Window *window) {
   // Label badges.
   int badges_h = render_badges(NULL, 0, 0, w, false);
   if (badges_h > 0) {
-    s_badges = layer_create(GRect(pad, y, w, badges_h));
+    s_badges = layer_create(GRect(pad_x, y, w, badges_h));
     layer_set_update_proc(s_badges, badges_update);
     scroll_layer_add_child(s_scroll, s_badges);
     y += badges_h;
@@ -505,13 +518,14 @@ static void build(Window *window) {
   if (subs_h > 0) {
     snprintf(s_sub_hdr, sizeof(s_sub_hdr), "%s (%d)", i18n(STR_SUBTASKS), data_subtask_count());
     y += 8;
-    s_subs = layer_create(GRect(pad, y, w, subs_h));
+    s_subs = layer_create(GRect(pad_x, y, w, subs_h));
     layer_set_update_proc(s_subs, subs_update);
     scroll_layer_add_child(s_scroll, s_subs);
     y += subs_h;
   }
 
-  scroll_layer_set_content_size(s_scroll, GSize(bounds.size.w, y + pad));
+  // Round: room at the end to scroll the last line up out of the narrow bottom.
+  scroll_layer_set_content_size(s_scroll, GSize(bounds.size.w, y + PBL_IF_ROUND_ELSE(40, 6)));
   layer_add_child(root, scroll_layer_get_layer(s_scroll));
 }
 

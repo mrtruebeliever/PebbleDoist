@@ -4,7 +4,8 @@
 
 **Your Todoist tasks on your wrist — add them by voice.**
 
-PebbleDoist is a Pebble Time 2 watchapp for Todoist. Browse your tasks per list or
+PebbleDoist is a Pebble Time 2 watchapp for Todoist (also built for the Pebble Round 2
+and Pebble 2 Duo). Browse your tasks per list or
 **by label**, see a **Today** view (today + overdue) with **due dates on every row**,
 open a task's **details** (description + labels), **dictate new tasks** (with
 natural-language due dates like "friday …"), and **complete or delete** them — straight
@@ -59,8 +60,13 @@ stays on the phone and is never sent to the watch.
   (instantly, no waiting), or **Delete** (with a confirmation) removes it.
 - **Quick-complete** *(optional)* — turn it on in the phone settings and a single **Select**
   ticks a task off, with a short **Undo** window; long-press still opens the menu.
-- **Text size** — set task lists to **Small**, **Medium** or **Large** in the phone settings;
-  the rows grow with the text so more titles fit, or fewer but bigger ones do.
+- **Sound on completion** *(optional)* — a short two-note tone when a task is ticked off,
+  on top of the vibration. Silent during Quiet Time or when the watch speaker is muted.
+- **Text size** — **Automatic** (the default) follows the watch's own text size; or set task
+  lists to **Small**, **Medium** or **Large** in the phone settings. The rows grow with the
+  text so more titles fit, or fewer but bigger ones do.
+- **Today in the app list** — Doist's line in the launcher shows how many tasks are due today
+  or overdue ("Today: 5"), and drops it at midnight.
 - **Timeline pins** *(optional)* — turn on **Show on timeline** in the phone settings and
   your tasks due in the next few days appear as pins on the Pebble timeline, each with a
   reminder that buzzes at the deadline. Completing, deleting or rescheduling a task clears

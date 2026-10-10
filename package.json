@@ -1,13 +1,12 @@
 {
   "name": "pebbledoist",
   "author": "mrtruebeliever",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "license": "MIT",
-  "keywords": ["pebble-app"],
+  "keywords": [
+    "pebble-app"
+  ],
   "private": true,
-  "dependencies": {
-    "pebble-clay": "^1.0.4"
-  },
   "pebble": {
     "displayName": "PebbleDoist",
     "uuid": "69de8701-3317-4381-bb1b-9760d6a14a19",
@@ -17,7 +16,9 @@
       "configurable"
     ],
     "targetPlatforms": [
-      "emery"
+      "emery",
+      "gabbro",
+      "flint"
     ],
     "watchapp": {
       "watchface": false
@@ -65,7 +66,9 @@
       "SUB_COUNT",
       "SUB_INDEX",
       "SUB_ID",
-      "SUB_TITLE"
+      "SUB_TITLE",
+      "TODAY_COUNT",
+      "DONE_SOUND"
     ],
     "resources": {
       "media": [
@@ -82,5 +85,8 @@
         }
       ]
     }
+  },
+  "dependencies": {
+    "@rebble/clay": "^1.1.0"
   }
 }

@@ -8,11 +8,13 @@
 #define PERSIST_LANG             4
 #define PERSIST_FONT_SIZE        5
 #define PERSIST_QUICK_COMPLETE   6
+#define PERSIST_DONE_SOUND       7
 
 // Task-list text size (mirrors the Clay FONT_SIZE select).
 #define FONT_SIZE_SMALL   0
-#define FONT_SIZE_MEDIUM  1  // default
+#define FONT_SIZE_MEDIUM  1
 #define FONT_SIZE_LARGE   2
+#define FONT_SIZE_AUTO    3  // default: follow the watch's text size setting
 
 // Quick-Launch start view (mirrors the Clay START_VIEW select).
 #define START_VIEW_OVERVIEW  0  // project overview (main menu)
@@ -25,11 +27,15 @@ void config_load(void);
 // Current UI language index (Lang from i18n.h).
 int         config_lang(void);
 
-// Text size of the task-list rows (FONT_SIZE_* above).
+// Text size of the task-list rows: FONT_SIZE_SMALL/MEDIUM/LARGE, with AUTO
+// already resolved against the watch's own text size.
 int         config_font_size(void);
 
 // True when a plain Select on a task completes it (quick-complete). Default false.
 bool        config_quick_complete(void);
+
+// True when completing a task also plays a short "done" sound. Default false.
+bool        config_done_sound(void);
 
 // Current quick-launch settings (valid after config_load / config_inbox_received).
 int         config_start_view(void);

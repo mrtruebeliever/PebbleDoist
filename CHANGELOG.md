@@ -4,6 +4,34 @@ All notable changes to PebbleDoist are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-10-11
+
+### Added
+- **Sound on completion** (phone settings, off by default): a short two-note
+  tone when a task or subtask is completed, alongside the vibration. Silent
+  during Quiet Time and when the watch speaker is muted (new `DONE_SOUND`
+  message key).
+- **"Automatic" task title size**, the new default: follows the watch's text
+  size (Settings → Display), Medium rows at the watch's default size. Small,
+  Medium and Large are still there, and a size chosen before stays as it was.
+- **Vandaag count in the launcher.** Doist's line in the app list shows how many
+  tasks are due today or overdue ("Today: 5"), and drops it at midnight. The
+  phone fetches the count along with the project list and with every Vandaag
+  load (new `TODAY_COUNT` message key).
+- **Pebble Round 2 (`gabbro`) and Pebble 2 Duo (`flint`).** On the round screen
+  the header shows the clock above a centred title (with the open-task count),
+  the lists are inset from the curved sides, and the task detail centres its
+  title and keeps clear of the edges. On black-and-white the red highlight
+  becomes black with white text, and the header turns white. The 144px screen
+  gets a smaller header clock and a smaller description font.
+
+### Changed
+- Settings page moved from `pebble-clay` to `@rebble/clay` 1.1.
+- Row colours now come from a few named roles in `theme.h` instead of literals.
+
+### Fixed
+- A compiler truncation warning in the header's count badge.
+
 ## [1.6.0] - 2026-08-15
 
 ### Changed

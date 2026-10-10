@@ -33,7 +33,11 @@ FEATURES
 • Timeline pins (optional) — tasks due in the next few days appear on the Pebble
   timeline with a reminder that buzzes at the deadline, and completing or
   rescheduling a task clears or moves its pin.
-• Text size — small, medium or large task rows, set from the phone.
+• Text size — follows your watch's text size, or pick small, medium or large
+  task rows from the phone.
+• Today's count in the app list, and an optional tone when you tick a task off.
+• Made for the Pebble Time 2, also built for the Pebble Round 2 and Pebble 2
+  Duo.
 • Available in English, Nederlands, Français, Deutsch and Español — on the watch
   and in the settings — following your watch language or set manually.
 • Privacy: your Todoist API token stays on the phone and is never sent to the

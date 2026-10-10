@@ -29,15 +29,33 @@ static int badge_count(void) {
 static void header_update(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
 
-  // Accent fill + a thin black bottom separator.
-  graphics_context_set_fill_color(ctx, theme_accent());
+  // Accent fill + a thin black bottom separator. White on black-and-white,
+  // where the accent would sit under the black text as black or dither.
+  graphics_context_set_fill_color(ctx, PBL_IF_COLOR_ELSE(theme_accent(), GColorWhite));
   graphics_fill_rect(ctx, b, 0, GCornerNone);
   graphics_context_set_stroke_color(ctx, GColorBlack);
   graphics_draw_line(ctx, GPoint(0, b.size.h - 1), GPoint(b.size.w, b.size.h - 1));
 
   graphics_context_set_text_color(ctx, GColorBlack);
   GFont f14 = fonts_get_system_font(FONT_KEY_GOTHIC_14);
-  GFont f18 = fonts_get_system_font(FONT_KEY_GOTHIC_18);
+
+#if defined(PBL_ROUND)
+  // No corners to put the icon, count and clock in: the clock goes on top, and
+  // the title -- with the open-task count after it -- centred underneath.
+  char clock_buf[16];
+  clock_copy_time_string(clock_buf, sizeof(clock_buf));
+  graphics_draw_text(ctx, clock_buf, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                     GRect(0, 6, b.size.w, 16),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+  char line[48];
+  int n = badge_count();
+  if (n > 0) snprintf(line, sizeof(line), "%s · %d", s_title, n);
+  else snprintf(line, sizeof(line), "%s", s_title);
+  graphics_draw_text(ctx, line, fonts_get_system_font(FONT_KEY_GOTHIC_18),
+                     GRect(30, 20, b.size.w - 60, 20),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+  return;
+#endif
 
   // Icon (left, vertically centered).
   int name_x = 6;
@@ -53,17 +71,26 @@ static void header_update(Layer *layer, GContext *ctx) {
   char time_buf[16];
   clock_copy_time_string(time_buf, sizeof(time_buf));
   // 56 fits "23:59"; a 12-hour locale renders "11:59 PM" and was being
-  // ellipsised down to the hour.
+  // ellipsised down to the hour. A 144px screen takes the clock a size down so
+  // the title keeps more than its first letters.
+#if PBL_DISPLAY_WIDTH < 180
+  GFont time_font = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+  const int TIME_W = clock_is_24h_style() ? 34 : 54;
+  const int time_y = 6;
+#else
+  GFont time_font = fonts_get_system_font(FONT_KEY_GOTHIC_18);
   const int TIME_W = clock_is_24h_style() ? 56 : 78;
+  const int time_y = 4;
+#endif
   int time_left = b.size.w - 4 - TIME_W;
-  graphics_draw_text(ctx, time_buf, f18, GRect(time_left, 4, TIME_W, 20),
+  graphics_draw_text(ctx, time_buf, time_font, GRect(time_left, time_y, TIME_W, 20),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
 
   // Open-task count badge (dot + number), just left of the time. Hidden when <= 0.
   int name_right = time_left - 6;
   int total = badge_count();
   if (total > 0) {
-    char cnt[8];
+    char cnt[12];
     snprintf(cnt, sizeof(cnt), "%d", total);
     GSize cs = graphics_text_layout_get_content_size(
         cnt, f14, GRect(0, 0, 40, 20), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);

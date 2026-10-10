@@ -18,6 +18,10 @@ static char s_detail_labels[DETAIL_LABELS_LEN] = "";
 static bool s_detail_ready = false;
 
 static int     s_load_state = LOAD_LOADING;
+static int     s_today_count = -1;
+
+int  data_today_count(void) { return s_today_count; }
+void data_set_today_count(int n) { s_today_count = n; }
 
 // --- Load state --------------------------------------------------------------
 

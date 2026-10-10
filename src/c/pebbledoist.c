@@ -1,6 +1,7 @@
 #include <pebble.h>
 #include "config.h"
 #include "data.h"
+#include "glance.h"
 #include "cache.h"
 #include "i18n.h"
 #include "dictation_flow.h"
@@ -116,6 +117,7 @@ static void init(void) {
 }
 
 static void deinit(void) {
+  glance_update();
   label_list_destroy();
   task_list_destroy();
   project_list_destroy();

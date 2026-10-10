@@ -1,4 +1,5 @@
 #include "task_list.h"
+#include "sfx.h"
 #include "data.h"
 #include "cache.h"
 #include "config.h"
@@ -88,7 +89,7 @@ static void pending_commit(void) {
   if (s_undo_timer) { app_timer_cancel(s_undo_timer); s_undo_timer = NULL; }
   if (s_pending_id[0]) {
     config_close_task(s_pending_id);            // server completes; re-stream reconciles
-    if (!quiet_time_is_active()) { vibes_short_pulse(); }
+    sfx_task_done();
     data_remove_task_by_id(s_pending_id);       // optimistic removal (no loading flash)
     s_pending_id[0] = '\0';
     task_list_reload();
@@ -132,7 +133,7 @@ static void quick_complete(int trow) {
 static void close_performed(ActionMenu *menu, const ActionMenuItem *item, void *context) {
   if (s_sel_task_id[0]) {
     config_close_task(s_sel_task_id);
-    if (!quiet_time_is_active()) { vibes_short_pulse(); }
+    sfx_task_done();
     data_remove_task_by_id(s_sel_task_id);   // optimistic — no loading flash
     task_list_reload();
     header_bar_refresh();
@@ -192,7 +193,7 @@ static void open_task_menu(Task *t) {
   // .background colours the rail down the left edge, .foreground only the
   // small crumb dot on it -- verified on the emulator. The sheet is always
   // black with white focused / grey unfocused text, not configurable here.
-    .colors = { .background = theme_accent(), .foreground = GColorBlack },
+    .colors = { .background = theme_highlight_bg(), .foreground = theme_row_fg(true) },
     .align = ActionMenuAlignCenter,
     .did_close = close_menu_did_close,
     .context = root,
@@ -239,11 +240,11 @@ static void draw_add_row(GContext *ctx, const Layer *cell) {
   GRect b = layer_get_bounds(cell);
   bool hl = menu_cell_layer_is_highlighted(cell);
   // Dark text on the red highlight reads better in low light than white.
-  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_context_set_text_color(ctx, theme_row_fg(hl));
   graphics_draw_text(ctx, i18n(STR_NEW_TASK), fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
                      GRect(8, 0, b.size.w - 12, 28),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-  graphics_context_set_text_color(ctx, hl ? GColorBlack : GColorDarkGray);
+  graphics_context_set_text_color(ctx, theme_row_dim(hl));
   graphics_draw_text(ctx, i18n(STR_DICTATE), fonts_get_system_font(FONT_KEY_GOTHIC_14),
                      GRect(8, 26, b.size.w - 12, 16),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
@@ -260,7 +261,7 @@ static void draw_done_row(GContext *ctx, GRect b, Task *t, bool hl, RowMetrics m
   int title_w = b.size.w - 40 - uw - 6;   // leave a small gap before the hint
 
   int ty = (b.size.h - m.text_h) / 2;   // no due line here — centre it vertically
-  GColor dim = hl ? GColorBlack : GColorDarkGray;
+  GColor dim = theme_row_dim(hl);
   graphics_context_set_text_color(ctx, dim);
   graphics_draw_text(ctx, t->title, m.font, GRect(34, ty, title_w, m.text_h),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
@@ -273,12 +274,12 @@ static void draw_done_row(GContext *ctx, GRect b, Task *t, bool hl, RowMetrics m
   graphics_draw_line(ctx, GPoint(34, sy), GPoint(34 + strike_w, sy));
 
   // "Undo" hint on the right.
-  graphics_context_set_text_color(ctx, hl ? GColorBlack : theme_accent());
+  graphics_context_set_text_color(ctx, theme_row_accent(hl));
   graphics_draw_text(ctx, undo, hint_font, GRect(b.size.w - 4 - uw, (b.size.h - 16) / 2, uw, 16),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
   // Ticked checkbox.
-  graphics_context_set_stroke_color(ctx, GColorBlack);
+  graphics_context_set_stroke_color(ctx, theme_row_fg(hl));
   graphics_draw_round_rect(ctx, GRect(10, b.size.h / 2 - 8, 16, 16), 3);
   graphics_draw_line(ctx, GPoint(13, b.size.h / 2), GPoint(16, b.size.h / 2 + 4));
   graphics_draw_line(ctx, GPoint(16, b.size.h / 2 + 4), GPoint(23, b.size.h / 2 - 5));
@@ -301,7 +302,7 @@ static int draw_sub_count(GContext *ctx, GRect b, Task *t, bool hl) {
   int total = SUB_ICON_W + 3 + ns.w;
   int x = b.size.w - 4 - total;
   int y = b.size.h - DUE_LINE_H - 1;
-  GColor c = hl ? GColorBlack : GColorDarkGray;
+  GColor c = theme_row_dim(hl);
 
   graphics_context_set_stroke_color(ctx, c);
   graphics_draw_line(ctx, GPoint(x + 1, y + 3), GPoint(x + 1, y + 10));
@@ -325,13 +326,13 @@ static void draw_task_row(GContext *ctx, const Layer *cell, Task *t) {
   bool has_due = t->due[0];
   bool has_sub = t->sub_count > 0;
   int ty = (has_due || has_sub) ? m.text_y : (b.size.h - m.text_h) / 2;
-  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_context_set_text_color(ctx, theme_row_fg(hl));
   if (hl) {
     // Selected row: marquee the title on one line (no ellipsis).
     graphics_draw_text(ctx, t->title, m.font, GRect(34 - s_marq_offset, ty, 4000, m.text_h),
                        GTextOverflowModeFill, GTextAlignmentLeft, NULL);
     // Re-paint the checkbox column so scrolled text never runs under it.
-    graphics_context_set_fill_color(ctx, theme_accent());
+    graphics_context_set_fill_color(ctx, theme_highlight_bg());
     graphics_fill_rect(ctx, GRect(0, 0, 34, b.size.h), 0, GCornerNone);
   } else {
     graphics_draw_text(ctx, t->title, m.font, GRect(34, ty, b.size.w - 40, m.text_h),
@@ -342,19 +343,20 @@ static void draw_task_row(GContext *ctx, const Layer *cell, Task *t) {
   // (either may be absent). Shown selected or not.
   int sub_w = draw_sub_count(ctx, b, t, hl);
   if (has_due) {
-    graphics_context_set_text_color(ctx, hl ? GColorBlack : GColorDarkGray);
+    graphics_context_set_text_color(ctx, theme_row_dim(hl));
     graphics_draw_text(ctx, t->due, fonts_get_system_font(FONT_KEY_GOTHIC_14),
                        GRect(34, b.size.h - DUE_LINE_H - 1, b.size.w - 38 - sub_w, DUE_LINE_H),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   }
 
   // Empty checkbox, drawn last so it stays visible on the scrolling row.
-  graphics_context_set_stroke_color(ctx, GColorBlack);
+  graphics_context_set_stroke_color(ctx, theme_row_fg(hl));
   graphics_draw_round_rect(ctx, GRect(10, b.size.h / 2 - 8, 16, 16), 3);
 }
 
 static void draw_status_row(GContext *ctx, const Layer *cell) {
   GRect b = layer_get_bounds(cell);
+  bool hl = menu_cell_layer_is_highlighted(cell);
   const char *title, *sub;
   if (data_load_state() != LOAD_OK) {
     switch (data_load_state()) {
@@ -366,11 +368,11 @@ static void draw_status_row(GContext *ctx, const Layer *cell) {
     title = (s_mode == TASK_LIST_TODAY) ? i18n(STR_NOTHING_TODAY) : i18n(STR_NO_TASKS);
     sub = "";
   }
-  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_context_set_text_color(ctx, theme_row_fg(hl));
   graphics_draw_text(ctx, title, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
                      GRect(8, 2, b.size.w - 12, 28),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-  graphics_context_set_text_color(ctx, GColorDarkGray);
+  graphics_context_set_text_color(ctx, PBL_IF_COLOR_ELSE(GColorDarkGray, theme_row_fg(hl)));
   graphics_draw_text(ctx, sub, fonts_get_system_font(FONT_KEY_GOTHIC_14),
                      GRect(8, 26, b.size.w - 12, 16),
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
@@ -570,7 +572,8 @@ static void window_load(Window *window) {
   GRect b = layer_get_bounds(root);
 
   int top = HEADER_BAR_HEIGHT;
-  s_menu = menu_layer_create(GRect(0, top, b.size.w, b.size.h - top));
+  s_menu = menu_layer_create(GRect(THEME_LIST_INSET, top, b.size.w - 2 * THEME_LIST_INSET,
+                                   b.size.h - top));
   menu_layer_set_callbacks(s_menu, NULL, (MenuLayerCallbacks){
     .get_num_rows = get_num_rows,
     .get_cell_height = get_cell_height,
@@ -580,7 +583,7 @@ static void window_load(Window *window) {
     .selection_changed = selection_changed,
   });
   menu_layer_set_normal_colors(s_menu, GColorWhite, GColorBlack);
-  menu_layer_set_highlight_colors(s_menu, theme_accent(), GColorBlack);
+  menu_layer_set_highlight_colors(s_menu, theme_highlight_bg(), theme_row_fg(true));
   menu_layer_set_click_config_onto_window(s_menu, window);
   layer_add_child(root, menu_layer_get_layer(s_menu));
 
